@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能问答 - 在线笔记系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.css">
+    <link rel="stylesheet" href="./css/chat.css">
+</head>
+
+<body>
+    <header class="header">
+        <button id="backToKbBtn" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            返回知识库
+        </button>
+        <h1>智能问答</h1>
+        <div class="spacer"></div>
+    </header>
+
+    <div class="chat-container">
+        <div class="chat-sidebar">
+            <div class="sidebar-header">
+                <h2>知识库</h2>
+                <div class="sidebar-buttons">
+                    <button id="refreshKbBtn" class="refresh-btn" title="刷新知识库列表">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button id="manageIndexBtn" class="manage-index-btn" title="管理知识库索引">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="search-section">
+                <input type="text" id="kbSearch" class="search-box" placeholder="搜索知识库...">
+            </div>
+            <div id="knowledgeBases" class="knowledge-bases-list">
+                <!-- 知识库列表将通过JavaScript动态生成 -->
+            </div>
+        </div>
+
+        <div class="chat-main">
+            <div class="chat-header">
+                <h2>与AI对话</h2>
+                <div class="selected-kb-info">
+                    当前选择的知识库: <span id="selectedKbNames">全部</span>
+                </div>
+            </div>
+
+            <div id="chatMessages" class="chat-messages">
+                <div class="message welcome-message">
+                    <div class="message-content">
+                        <p>您好！我是您的智能助手。</p>
+                        <p>您可以直接提问，也可以通过 @知识库名称 来指定特定的知识库进行问答。</p>
+                        <p>例如："@我的学习笔记 什么是机器学习？"</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-container">
+                    <textarea id="messageInput" class="message-input" placeholder="输入您的问题... (@知识库名称 可指定知识库)"
+                        rows="3"></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                        发送
+                    </button>
+                </div>
+                <div class="input-hints">
+                    <small>提示：使用 @知识库名称 可指定特定知识库进行问答</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="./js/chat.js"></script>
+</body>
+
+</html>

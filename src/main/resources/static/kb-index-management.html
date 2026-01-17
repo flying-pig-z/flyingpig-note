@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库索引管理 - 在线笔记系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.css">
+    <link rel="stylesheet" href="./css/kb-index-management.css">
+</head>
+
+<body>
+    <header class="header">
+        <button id="backToChatBtn" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            返回问答
+        </button>
+        <h1>知识库索引管理</h1>
+        <div class="spacer"></div>
+    </header>
+
+    <div class="container">
+        <div class="search-section">
+            <input type="text" id="kbSearch" class="search-box" placeholder="搜索知识库...">
+            <button id="refreshKbBtn" class="refresh-btn" title="刷新知识库列表">
+                <i class="fas fa-sync-alt"></i>
+                刷新
+            </button>
+        </div>
+        <div id="knowledgeBases" class="knowledge-bases">
+            <!-- 知识库列表将通过JavaScript动态生成 -->
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.js"></script>
+    <script src="./js/kb-index-management.js"></script>
+</body>
+
+</html>

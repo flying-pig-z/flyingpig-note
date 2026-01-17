@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知识库管理 - 在线笔记系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.css">
+    <link rel="stylesheet" href="./css/dashboard.css">
+</head>
+
+<body>
+<header class="header">
+    <h1>知识库管理</h1>
+    <div class="user-info">
+        <span id="currentUser">欢迎，用户</span>
+        <button id="logoutBtn" class="logout-btn">
+            <i class="fas fa-sign-out-alt"></i>
+            退出
+        </button>
+    </div>
+</header>
+
+<div class="dashboard-content">
+    <div class="search-section">
+        <input type="text" id="kbSearch" class="search-box" placeholder="搜索知识库...">
+        <button id="importKbBtn" class="import-kb-btn">
+            <i class="fas fa-file-import"></i>
+            批量导入
+        </button>
+        <button id="addKbBtn" class="add-kb-btn">
+            <i class="fas fa-plus"></i>
+            新建知识库
+        </button>
+    </div>
+    <div id="knowledgeBases" class="knowledge-bases">
+        <!-- 知识库卡片将通过JavaScript动态生成 -->
+    </div>
+</div>
+
+<!-- 文件夹选择模态框 -->
+<div id="folderModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>批量导入知识库</h2>
+            <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="folderInput">选择包含Markdown文件的文件夹：</label>
+                <input type="file" id="folderInput" webkitdirectory directory multiple>
+                <p class="help-text">请选择一个文件夹，系统将自动识别其中的.md文件并创建对应的笔记</p>
+            </div>
+            <div class="form-group">
+                <label for="knowledgeBaseName">知识库名称：</label>
+                <input type="text" id="knowledgeBaseName" placeholder="请输入知识库名称">
+            </div>
+            <div class="form-group">
+                <label for="knowledgeBaseDesc">知识库描述（可选）：</label>
+                <textarea id="knowledgeBaseDesc" placeholder="请输入知识库描述"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="cancelImport" class="btn-secondary">取消</button>
+            <button id="confirmImport" class="btn-primary">开始导入</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.10.1/sweetalert2.min.js"></script>
+<script src="./js/dashboard.js"></script>
+</body>
+
+</html>

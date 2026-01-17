@@ -1,0 +1,447 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f7fa;
+    height: 100vh;
+    color: #333;
+    overflow: hidden;
+}
+
+.notes-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+}
+
+.notes-layout {
+    display: flex;
+    height: 100%;
+    width: 100%;
+}
+
+.sidebar {
+    width: 300px;
+    background: white;
+    border-right: 1px solid #e1e1e1;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+    position: relative;
+    z-index: 100;
+}
+
+.sidebar.collapsed {
+    width: 50px;
+}
+
+.sidebar.collapsed .sidebar-header>*:not(.collapse-btn) {
+    display: none;
+}
+
+.sidebar.collapsed .notes-tree {
+    display: none;
+}
+
+/* 拖拽调节条 */
+.resizer {
+    width: 4px;
+    background: #e1e1e1;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.resizer:hover,
+.resizer.dragging {
+    background: #667eea;
+}
+
+body.resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+.collapse-btn {
+    position: absolute;
+    top: 20px;
+    right: 15px;
+    background: #f8f9fa;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.collapse-btn:hover {
+    background: #e9ecef;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #e1e1e1;
+    background: #f8f9fa;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.back-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 15px;
+}
+
+.back-btn:hover {
+    background: #5a6268;
+}
+
+.kb-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.note-search {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #e1e1e1;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.note-search:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.add-note-btn {
+    width: 100%;
+    padding: 10px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.add-note-btn:hover {
+    background: #218838;
+}
+
+.notes-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    min-height: 0;
+}
+
+/* 可拖拽的分隔条 */
+.resizer {
+    width: 4px;
+    background: #e1e1e1;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.resizer:hover {
+    background: #667eea;
+}
+
+.resizer.dragging {
+    background: #667eea;
+}
+
+/* 拖拽时禁止选中文本 */
+body.resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+body.resizing .editor-area,
+body.resizing .sidebar {
+    pointer-events: none;
+}
+
+.note-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    margin-bottom: 8px;
+    border: 1px solid transparent;
+}
+
+.note-item:hover {
+    background: #f8f9fa;
+    border-color: #e9ecef;
+}
+
+.note-item.active {
+    background: #e3f2fd;
+    color: #1976d2;
+    border-color: #1976d2;
+}
+
+.note-icon {
+    margin-right: 12px;
+    color: #666;
+    width: 16px;
+    text-align: center;
+}
+
+.note-item.active .note-icon {
+    color: #1976d2;
+}
+
+.note-title {
+    flex: 1;
+    font-weight: 500;
+}
+
+.note-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.note-item:hover .note-actions {
+    opacity: 1;
+}
+
+.delete-btn {
+    background: #ff6b6b;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.delete-btn:hover {
+    background: #ff5252;
+}
+
+.editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+    background: #fff;
+}
+
+/* 笔记项编辑状态 */
+.note-item.editing {
+    padding: 8px 12px;
+}
+
+.note-item.editing .note-title {
+    display: none;
+}
+
+.note-item.editing .note-actions {
+    display: none;
+}
+
+.note-item.editing .note-icon {
+    display: none;
+}
+
+.note-title-edit {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    background: white;
+}
+
+.note-title-edit:focus {
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+/* 重命名按钮 */
+.rename-btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.rename-btn:hover {
+    background: #5a6fd8;
+}
+
+/* Vditor 容器样式 */
+.vditor-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* 仅设置必要的布局样式，不强制覆盖组件内部样式 */
+.vditor-container .vditor {
+    flex: 1;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+/* 隐藏 Vditor 工具栏边框 */
+.vditor-container .vditor-toolbar {
+    border-bottom: 1px solid #e1e1e1 !important;
+    background: #fafbfc !important;
+}
+
+/* IR 模式下的字体样式优化 */
+.vditor-ir pre.vditor-reset {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.8;
+    color: #24292f;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #666;
+    text-align: center;
+}
+
+.empty-state i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    color: #ccc;
+}
+
+/* 自定义 SweetAlert2 样式 */
+.swal2-popup {
+    border-radius: 15px !important;
+    padding: 2rem !important;
+}
+
+.swal2-title {
+    font-size: 1.5rem !important;
+    font-weight: 600 !important;
+}
+
+.swal2-input {
+    border: 2px solid #e1e1e1 !important;
+    border-radius: 8px !important;
+    padding: 12px !important;
+    font-size: 14px !important;
+}
+
+.swal2-input:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
+}
+
+.swal2-confirm {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-weight: 500 !important;
+}
+
+.swal2-cancel {
+    background: #6c757d !important;
+    border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-weight: 500 !important;
+}
+
+.swal2-success .swal2-success-ring {
+    border-color: #667eea !important;
+}
+
+.swal2-success .swal2-success-fix {
+    display: none !important;
+}
+
+/* 保存状态指示器 */
+.save-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.save-indicator.show {
+    opacity: 1;
+}
+
+.save-indicator.success {
+    background: rgba(40, 167, 69, 0.9);
+}
+
+.save-indicator.error {
+    background: rgba(220, 53, 69, 0.9);
+}
+
+/* 自定义滚动条样式 */
+.notes-tree::-webkit-scrollbar,
+.vditor-ir::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notes-tree::-webkit-scrollbar-track,
+.vditor-ir::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.notes-tree::-webkit-scrollbar-thumb,
+.vditor-ir::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.notes-tree::-webkit-scrollbar-thumb:hover,
+.vditor-ir::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 250px;
+    }
+}

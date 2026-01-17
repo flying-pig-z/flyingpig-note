@@ -1,0 +1,79 @@
+server:
+  port: 9091
+
+spring:
+  application:
+    name: note-system
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://8.210.250.29:3306/note_system?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+    username: root
+    password: '@Aa123456'
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+  # ========== Spring AI MCP 配置 ==========
+  ai:
+    mcp:
+      server:
+        name: note-rag-server
+        version: 1.0.0
+        type: SYNC
+        protocol: SSE
+        # 启用注解扫描
+        annotation-scanner:
+          enabled: true
+        # SSE 端点
+        sse-endpoint: /mcp/sse
+        sse-message-endpoint: /mcp/messages
+        # 服务器能力
+        capabilities:
+          tool: true
+        instructions: "笔记RAG知识库问答MCP服务器"
+
+# MyBatis Plus配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: AUTO
+
+# 日志配置
+logging:
+  level:
+    # 将mapper包的日志级别调高到error，避免输出SQL相关信息
+    fun.flyingpig.note.mapper: error
+    root: info
+    # MCP 调试日志
+    org.springframework.ai.mcp: debug
+    io.modelcontextprotocol: debug
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+
+# JWT配置
+jwt:
+  secret: mySecretKey123456789012345678901234567890
+  expiration: 86400000
+  header: Authorization
+  prefix: Bearer
+
+# 问答AI配置
+chat:
+  api-key: ak_1Yg9aI0Vw1bo8O92VO4Or2lf2ql3o
+  base-url: https://api.longcat.chat/openai
+  model: LongCat-Flash-Chat
+
+# 智谱清言配置
+zhipu:
+  api-key: aeeac832e6b941059986c241b73748af.8aIB9IPrqvVldtOG
+  embedding-model: embedding-3
+  embedding-dimensions: 1024
+
+# 向量检索配置
+rag:
+  top-k: 5
+  similarity-threshold: 0.7
