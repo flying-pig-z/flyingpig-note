@@ -57,7 +57,7 @@
 3. 使用 Maven 构建项目：`mvn clean install`
 4. 启动应用：`java -jar note-system-1.0.0.jar`
 
-## 系统架构
+## 关键流程
 
 ### 1. RAG（检索增强生成）
 
