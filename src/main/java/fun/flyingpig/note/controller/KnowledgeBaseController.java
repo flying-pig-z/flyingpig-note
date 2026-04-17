@@ -3,7 +3,7 @@ package fun.flyingpig.note.controller;
 import fun.flyingpig.note.dto.KnowledgeBaseDTO;
 import fun.flyingpig.note.dto.Result;
 import fun.flyingpig.note.entity.KnowledgeBase;
-import fun.flyingpig.note.service.KnowledgeBaseService;
+import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
 import fun.flyingpig.note.util.jwt.UserContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;

@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.index;
+package fun.flyingpig.note.service.rag.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import fun.flyingpig.note.dto.IndexProgressDTO;
@@ -9,8 +9,10 @@ import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.entity.NoteVectorIndex;
 import fun.flyingpig.note.mapper.KnowledgeBaseMapper;
 import fun.flyingpig.note.mapper.NoteMapper;
-import fun.flyingpig.note.service.INoteVectorIndexService;
-import fun.flyingpig.note.service.qdrant.QdrantService;
+import fun.flyingpig.note.qdrant.QdrantClient;
+import fun.flyingpig.note.service.rag.NoteIndexService;
+import fun.flyingpig.note.service.rag.RagIndexService;
+import fun.flyingpig.note.service.vectorindex.INoteVectorIndexService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,22 +30,24 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class RagIndexService {
+public class RagIndexServiceImpl implements RagIndexService {
 
     private static final Consumer<IndexProgressDTO> NO_OP_PROGRESS_CONSUMER = progress -> { };
 
     private final NoteMapper noteMapper;
     private final INoteVectorIndexService noteVectorIndexService;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
-    private final NoteIndexWriter noteIndexWriter;
-    private final QdrantService qdrantService;
+    private final NoteIndexService noteIndexService;
+    private final QdrantClient qdrantClient;
 
     @Transactional
+    @Override
     public UpdateIndexResultDTO updateIndex(UpdateIndexDTO updateIndexDTO) {
         return updateIndex(updateIndexDTO, NO_OP_PROGRESS_CONSUMER);
     }
 
     @Transactional
+    @Override
     public UpdateIndexResultDTO updateIndex(UpdateIndexDTO updateIndexDTO, Consumer<IndexProgressDTO> progressConsumer) {
         Consumer<IndexProgressDTO> safeProgressConsumer = progressConsumer != null ? progressConsumer : NO_OP_PROGRESS_CONSUMER;
         Long kbId = updateIndexDTO.getKnowledgeBaseId();
@@ -100,14 +104,14 @@ public class RagIndexService {
             LocalDateTime latestIndexTime = latestIndexTimeMap.get(note.getId());
             String currentAction;
             if (latestIndexTime == null) {
-                noteIndexWriter.writeIndexForNote(note);
+                noteIndexService.writeIndexForNote(note);
                 detail.setAction("INSERT");
                 detail.setMessage("新建索引成功");
                 result.setInsertedCount(result.getInsertedCount() + 1);
                 currentAction = "INSERT";
             } else if (latestIndexTime.isBefore(note.getUpdateTime())) {
                 removeNoteIndexes(note.getId());
-                noteIndexWriter.writeIndexForNote(note);
+                noteIndexService.writeIndexForNote(note);
                 detail.setAction("UPDATE");
                 detail.setMessage("索引已更新");
                 result.setUpdatedCount(result.getUpdatedCount() + 1);
@@ -145,11 +149,13 @@ public class RagIndexService {
     }
 
     @Transactional
+    @Override
     public UpdateIndexResultDTO forceUpdateIndex(UpdateIndexDTO updateIndexDTO) {
         return forceUpdateIndex(updateIndexDTO, NO_OP_PROGRESS_CONSUMER);
     }
 
     @Transactional
+    @Override
     public UpdateIndexResultDTO forceUpdateIndex(UpdateIndexDTO updateIndexDTO, Consumer<IndexProgressDTO> progressConsumer) {
         Consumer<IndexProgressDTO> safeProgressConsumer = progressConsumer != null ? progressConsumer : NO_OP_PROGRESS_CONSUMER;
         Long kbId = updateIndexDTO.getKnowledgeBaseId();
@@ -171,7 +177,7 @@ public class RagIndexService {
         ));
 
         noteVectorIndexService.deleteByKnowledgeBaseId(kbId);
-        qdrantService.deleteByKnowledgeBaseId(kbId);
+        qdrantClient.deleteByKnowledgeBaseId(kbId);
         log.info("已删除知识库 {} 的所有现有索引(MySQL + Qdrant)", kbId);
 
         UpdateIndexResultDTO result = new UpdateIndexResultDTO();
@@ -188,7 +194,7 @@ public class RagIndexService {
             detail.setNoteId(note.getId());
             detail.setNoteTitle(note.getTitle());
 
-            noteIndexWriter.writeIndexForNote(note);
+            noteIndexService.writeIndexForNote(note);
 
             detail.setAction("INSERT");
             detail.setMessage("强制重建索引成功");
@@ -319,7 +325,7 @@ public class RagIndexService {
         LambdaQueryWrapper<NoteVectorIndex> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(NoteVectorIndex::getNoteId, noteId);
         noteVectorIndexService.remove(deleteWrapper);
-        qdrantService.deleteByNoteId(noteId);
+        qdrantClient.deleteByNoteId(noteId);
     }
 
     private void updateKnowledgeBaseIndexTime(Long knowledgeBaseId) {

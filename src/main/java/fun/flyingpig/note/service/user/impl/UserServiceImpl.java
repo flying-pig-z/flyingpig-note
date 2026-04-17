@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.user.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -6,7 +6,7 @@ import fun.flyingpig.note.dto.LoginDTO;
 import fun.flyingpig.note.dto.RegisterDTO;
 import fun.flyingpig.note.entity.User;
 import fun.flyingpig.note.mapper.UserMapper;
-import fun.flyingpig.note.service.UserService;
+import fun.flyingpig.note.service.user.UserService;
 import fun.flyingpig.note.util.BCryptUtil;
 import org.springframework.stereotype.Service;
 

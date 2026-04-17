@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.qdrant;
+package fun.flyingpig.note.qdrant;
 
 import fun.flyingpig.note.dto.QdrantSearchResult;
 import fun.flyingpig.note.entity.QdrantPoint;
@@ -7,9 +7,9 @@ import java.util.List;
 
 
 /**
- * Qdrant向量数据库服务接口
+ * Qdrant 向量数据库客户端接口
  */
-public interface QdrantService {
+public interface QdrantClient {
 
     /**
      * 初始化Collection（如果不存在则创建）

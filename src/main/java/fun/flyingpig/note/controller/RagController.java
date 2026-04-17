@@ -6,7 +6,8 @@ import fun.flyingpig.note.dto.RagQueryDTO;
 import fun.flyingpig.note.dto.Result;
 import fun.flyingpig.note.dto.UpdateIndexDTO;
 import fun.flyingpig.note.dto.UpdateIndexResultDTO;
-import fun.flyingpig.note.service.RagService;
+import fun.flyingpig.note.service.rag.RagAnswerService;
+import fun.flyingpig.note.service.rag.RagIndexService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,12 +32,13 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class RagController {
 
-    private final RagService ragService;
+    private final RagAnswerService ragAnswerService;
+    private final RagIndexService ragIndexService;
 
     @PostMapping("/answer")
     public Result<RagAnswerDTO> answer(@RequestBody @Validated RagQueryDTO queryDTO) {
         log.info("收到RAG问答请求: {}", queryDTO.getQuestion());
-        RagAnswerDTO answer = ragService.answer(queryDTO);
+        RagAnswerDTO answer = ragAnswerService.answer(queryDTO);
         return Result.success(answer);
     }
 
@@ -51,7 +53,7 @@ public class RagController {
         return outputStream -> {
             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8));
             try {
-                RagAnswerDTO answer = ragService.answerStream(queryDTO, delta ->
+                RagAnswerDTO answer = ragAnswerService.answerStream(queryDTO, delta ->
                         writeSseEvent(writer, "delta", Map.of("content", delta))
                 );
 
@@ -71,7 +73,7 @@ public class RagController {
     @PostMapping("/updateIndex")
     public Result<UpdateIndexResultDTO> updateIndex(@RequestBody @Validated UpdateIndexDTO updateIndexDTO) {
         log.info("收到更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
-        UpdateIndexResultDTO result = ragService.updateIndex(updateIndexDTO);
+        UpdateIndexResultDTO result = ragIndexService.updateIndex(updateIndexDTO);
         return Result.success(result);
     }
 
@@ -84,14 +86,14 @@ public class RagController {
         prepareSseResponse(response);
         return streamIndexUpdate(
                 updateIndexDTO,
-                writer -> ragService.updateIndex(updateIndexDTO, progress -> writeSseEvent(writer, "progress", progress))
+                writer -> ragIndexService.updateIndex(updateIndexDTO, progress -> writeSseEvent(writer, "progress", progress))
         );
     }
 
     @PostMapping("/forceUpdateIndex")
     public Result<UpdateIndexResultDTO> forceUpdateIndex(@RequestBody @Validated UpdateIndexDTO updateIndexDTO) {
         log.info("收到强制更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
-        UpdateIndexResultDTO result = ragService.forceUpdateIndex(updateIndexDTO);
+        UpdateIndexResultDTO result = ragIndexService.forceUpdateIndex(updateIndexDTO);
         return Result.success(result);
     }
 
@@ -104,7 +106,7 @@ public class RagController {
         prepareSseResponse(response);
         return streamIndexUpdate(
                 updateIndexDTO,
-                writer -> ragService.forceUpdateIndex(updateIndexDTO, progress -> writeSseEvent(writer, "progress", progress))
+                writer -> ragIndexService.forceUpdateIndex(updateIndexDTO, progress -> writeSseEvent(writer, "progress", progress))
         );
     }
 

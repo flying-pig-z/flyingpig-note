@@ -1,18 +1,12 @@
-package fun.flyingpig.note.service;
+package fun.flyingpig.note.service.rag;
 
 import fun.flyingpig.note.dto.IndexProgressDTO;
-import fun.flyingpig.note.dto.RagAnswerDTO;
-import fun.flyingpig.note.dto.RagQueryDTO;
 import fun.flyingpig.note.dto.UpdateIndexDTO;
 import fun.flyingpig.note.dto.UpdateIndexResultDTO;
 
 import java.util.function.Consumer;
 
-public interface RagService {
-
-    RagAnswerDTO answer(RagQueryDTO queryDTO);
-
-    RagAnswerDTO answerStream(RagQueryDTO queryDTO, Consumer<String> deltaConsumer);
+public interface RagIndexService {
 
     UpdateIndexResultDTO updateIndex(UpdateIndexDTO updateIndexDTO);
 

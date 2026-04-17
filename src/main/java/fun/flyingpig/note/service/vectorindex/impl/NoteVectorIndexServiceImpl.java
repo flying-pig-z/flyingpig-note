@@ -1,10 +1,10 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.vectorindex.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import fun.flyingpig.note.dto.NoteIndexLatestUpdateDTO;
 import fun.flyingpig.note.entity.NoteVectorIndex;
 import fun.flyingpig.note.mapper.NoteVectorIndexMapper;
-import fun.flyingpig.note.service.INoteVectorIndexService;
+import fun.flyingpig.note.service.vectorindex.INoteVectorIndexService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;

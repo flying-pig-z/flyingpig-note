@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.batchimport.impl;
 
 import fun.flyingpig.note.dto.BatchImportResult;
 import fun.flyingpig.note.dto.ImportDetail;
@@ -6,10 +6,10 @@ import fun.flyingpig.note.dto.NoteGroupDTO;
 import fun.flyingpig.note.entity.KnowledgeBase;
 import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.entity.NoteGroup;
-import fun.flyingpig.note.service.BatchImportService;
-import fun.flyingpig.note.service.KnowledgeBaseService;
-import fun.flyingpig.note.service.NoteGroupService;
-import fun.flyingpig.note.service.NoteService;
+import fun.flyingpig.note.service.batchimport.BatchImportService;
+import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
+import fun.flyingpig.note.service.notegroup.NoteGroupService;
+import fun.flyingpig.note.service.note.NoteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

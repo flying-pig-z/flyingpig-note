@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.qdrant;
+package fun.flyingpig.note.qdrant;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
@@ -17,11 +17,11 @@ import org.springframework.web.client.RestTemplate;
 import java.util.*;
 
 /**
- * Qdrant向量数据库服务实现类
+ * Qdrant 向量数据库客户端实现
  */
 @Slf4j
 @Service
-public class QdrantServiceImpl implements QdrantService {
+public class QdrantClientImpl implements QdrantClient {
 
     @Autowired
     private QdrantProperties qdrantProperties;

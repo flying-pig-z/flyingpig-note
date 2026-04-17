@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service;
+package fun.flyingpig.note.service.note;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import fun.flyingpig.note.dto.NoteDTO;

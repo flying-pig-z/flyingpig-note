@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.note.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -7,9 +7,9 @@ import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.entity.NoteGroup;
 import fun.flyingpig.note.exception.BusinessException;
 import fun.flyingpig.note.mapper.NoteMapper;
-import fun.flyingpig.note.service.KnowledgeBaseService;
-import fun.flyingpig.note.service.NoteGroupService;
-import fun.flyingpig.note.service.NoteService;
+import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
+import fun.flyingpig.note.service.note.NoteService;
+import fun.flyingpig.note.service.notegroup.NoteGroupService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

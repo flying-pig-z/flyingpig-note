@@ -1,11 +1,12 @@
-package fun.flyingpig.note.service.index;
+package fun.flyingpig.note.service.rag.impl;
 
 import com.alibaba.fastjson.JSON;
 import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.entity.NoteVectorIndex;
 import fun.flyingpig.note.entity.QdrantPoint;
-import fun.flyingpig.note.service.INoteVectorIndexService;
-import fun.flyingpig.note.service.qdrant.QdrantService;
+import fun.flyingpig.note.service.rag.NoteIndexService;
+import fun.flyingpig.note.service.vectorindex.INoteVectorIndexService;
+import fun.flyingpig.note.qdrant.QdrantClient;
 import fun.flyingpig.note.util.MarkdownChunker;
 import fun.flyingpig.note.util.embedding.ZhiPuEmbedding3Util;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +20,13 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class NoteIndexWriter {
+public class NoteIndexServiceImpl implements NoteIndexService {
 
     private final ZhiPuEmbedding3Util zhiPuEmbedding3Util;
     private final INoteVectorIndexService noteVectorIndexService;
-    private final QdrantService qdrantService;
+    private final QdrantClient qdrantClient;
 
+    @Override
     public void writeIndexForNote(Note note) {
         long startTime = System.currentTimeMillis();
         String content = note.getContent();
@@ -71,7 +73,7 @@ public class NoteIndexWriter {
 
         if (!qdrantPoints.isEmpty()) {
             try {
-                qdrantService.upsertPoints(qdrantPoints);
+                qdrantClient.upsertPoints(qdrantPoints);
                 log.debug("笔记 {} 的 {} 个分块已同步写入Qdrant", note.getId(), qdrantPoints.size());
             } catch (Exception e) {
                 log.error("写入Qdrant失败，笔记ID: {}, 标题: {}, 错误: {}", note.getId(), getSafeTitle(note), e.getMessage());

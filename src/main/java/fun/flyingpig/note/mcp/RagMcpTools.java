@@ -3,8 +3,8 @@ package fun.flyingpig.note.mcp;
 import fun.flyingpig.note.dto.RagAnswerDTO;
 import fun.flyingpig.note.dto.RagQueryDTO;
 import fun.flyingpig.note.entity.KnowledgeBase;
-import fun.flyingpig.note.service.KnowledgeBaseService;
-import fun.flyingpig.note.service.RagService;
+import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
+import fun.flyingpig.note.service.rag.RagAnswerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springaicommunity.mcp.annotation.McpTool;
@@ -24,7 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RagMcpTools {
 
-    private final RagService ragService;
+    private final RagAnswerService ragAnswerService;
     private final KnowledgeBaseService knowledgeBaseService;
 
     /**
@@ -45,7 +45,7 @@ public class RagMcpTools {
         queryDTO.setQuestion(question);
         queryDTO.setKnowledgeBaseIds(knowledgeBaseIds);
 
-        return ragService.answer(queryDTO);
+        return ragAnswerService.answer(queryDTO);
     }
 
     /**

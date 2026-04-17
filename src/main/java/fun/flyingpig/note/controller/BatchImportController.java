@@ -2,7 +2,7 @@ package fun.flyingpig.note.controller;
 
 import fun.flyingpig.note.dto.BatchImportResult;
 import fun.flyingpig.note.dto.Result;
-import fun.flyingpig.note.service.BatchImportService;
+import fun.flyingpig.note.service.batchimport.BatchImportService;
 import fun.flyingpig.note.util.jwt.UserContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

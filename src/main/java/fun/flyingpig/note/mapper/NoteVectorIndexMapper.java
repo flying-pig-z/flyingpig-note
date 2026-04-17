@@ -11,7 +11,7 @@ import org.apache.ibatis.annotations.Select;
 import java.util.List;
 
 /**
- * 绗旇鍚戦噺绱㈠紩Mapper
+ * 笔记向量索引 Mapper
  */
 @Mapper
 public interface NoteVectorIndexMapper extends BaseMapper<NoteVectorIndex> {
@@ -28,7 +28,7 @@ public interface NoteVectorIndexMapper extends BaseMapper<NoteVectorIndex> {
     List<NoteIndexLatestUpdateDTO> selectLatestUpdateTimesByKnowledgeBaseId(@Param("knowledgeBaseId") Long knowledgeBaseId);
 
     /**
-     * 鏍规嵁鐭ヨ瘑搴揑D鍒犻櫎鎵€鏈夊悜閲忕储寮?
+     * 根据知识库 ID 删除所有向量索引
      */
     @Delete("DELETE FROM note_vector_index WHERE knowledge_base_id = #{knowledgeBaseId}")
     void deleteByKnowledgeBaseId(@Param("knowledgeBaseId") Long knowledgeBaseId);

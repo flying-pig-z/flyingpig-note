@@ -6,7 +6,7 @@ import fun.flyingpig.note.dto.LoginResponseDTO;
 import fun.flyingpig.note.dto.RegisterDTO;
 import fun.flyingpig.note.dto.Result;
 import fun.flyingpig.note.entity.User;
-import fun.flyingpig.note.service.UserService;
+import fun.flyingpig.note.service.user.UserService;
 import fun.flyingpig.note.util.jwt.JwtUtil;
 import fun.flyingpig.note.util.jwt.UserContext;
 import org.springframework.beans.factory.annotation.Autowired;

@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service;
+package fun.flyingpig.note.service.batchimport;
 
 import fun.flyingpig.note.dto.BatchImportResult;
 import fun.flyingpig.note.dto.ImportDetail;

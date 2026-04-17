@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.answer;
+package fun.flyingpig.note.service.rag.impl;
 
 import fun.flyingpig.note.config.RagProperties;
 import fun.flyingpig.note.dto.QdrantSearchResult;
@@ -6,7 +6,8 @@ import fun.flyingpig.note.dto.RagAnswerDTO;
 import fun.flyingpig.note.dto.RagQueryDTO;
 import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.mapper.NoteMapper;
-import fun.flyingpig.note.service.qdrant.QdrantService;
+import fun.flyingpig.note.qdrant.QdrantClient;
+import fun.flyingpig.note.service.rag.RagAnswerService;
 import fun.flyingpig.note.util.ChatUtil;
 import fun.flyingpig.note.util.embedding.ZhiPuEmbedding3Util;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class RagAnswerService {
+public class RagAnswerServiceImpl implements RagAnswerService {
 
     private static final int MAX_HISTORY_MESSAGES = 10;
     private static final String EMPTY_RESULT_MESSAGE = "抱歉，指定的知识库中暂无可用索引数据，请先更新索引。";
@@ -45,12 +46,13 @@ public class RagAnswerService {
     private final ZhiPuEmbedding3Util zhiPuEmbedding3Util;
     private final RagProperties ragProperties;
     private final ChatUtil chatUtil;
-    private final QdrantService qdrantService;
+    private final QdrantClient qdrantClient;
     private final NoteMapper noteMapper;
 
     /**
      * 普通问答入口，一次性返回完整回答。
      */
+    @Override
     public RagAnswerDTO answer(RagQueryDTO queryDTO) {
         long startTime = System.currentTimeMillis();
         PreparedAnswerContext preparedContext = prepareAnswerContext(queryDTO);
@@ -72,6 +74,7 @@ public class RagAnswerService {
     /**
      * 流式问答入口，边生成边把增量文本回调给上层。
      */
+    @Override
     public RagAnswerDTO answerStream(RagQueryDTO queryDTO, Consumer<String> deltaConsumer) {
         long startTime = System.currentTimeMillis();
         Consumer<String> safeDeltaConsumer = deltaConsumer != null ? deltaConsumer : chunk -> { };
@@ -118,7 +121,7 @@ public class RagAnswerService {
 
         long qdrantSearchStartTime = System.currentTimeMillis();
         // 根据问题向量和知识库范围执行向量检索。
-        List<QdrantSearchResult> searchResults = qdrantService.search(
+        List<QdrantSearchResult> searchResults = qdrantClient.search(
                 queryEmbedding,
                 queryDTO.getKnowledgeBaseIds(),
                 ragProperties.getTopK()

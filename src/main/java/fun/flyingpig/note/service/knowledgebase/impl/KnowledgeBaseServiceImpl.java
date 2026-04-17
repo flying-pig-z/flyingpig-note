@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.knowledgebase.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -7,9 +7,9 @@ import fun.flyingpig.note.entity.KnowledgeBase;
 import fun.flyingpig.note.mapper.KnowledgeBaseMapper;
 import fun.flyingpig.note.mapper.NoteMapper;
 import fun.flyingpig.note.mapper.NoteGroupMapper;
-import fun.flyingpig.note.service.INoteVectorIndexService;
-import fun.flyingpig.note.service.KnowledgeBaseService;
-import fun.flyingpig.note.service.qdrant.QdrantService;
+import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
+import fun.flyingpig.note.service.vectorindex.INoteVectorIndexService;
+import fun.flyingpig.note.qdrant.QdrantClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -31,7 +31,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     private INoteVectorIndexService noteVectorIndexService;
 
     @Autowired
-    QdrantService qdrantService;
+    QdrantClient qdrantClient;
 
     @Override
     public List<KnowledgeBase> getUserKnowledgeBases(Long userId) {
@@ -75,7 +75,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     public void deleteKnowledgeBaseCascade(Long kbId) {
         // 删除该知识库下的所有向量索引
         noteVectorIndexService.deleteByKnowledgeBaseId(kbId);
-        qdrantService.deleteByKnowledgeBaseId(kbId);
+        qdrantClient.deleteByKnowledgeBaseId(kbId);
         // 删除该知识库下的所有笔记
         noteMapper.deleteByKnowledgeBaseId(kbId);
         // 删除知识库本身

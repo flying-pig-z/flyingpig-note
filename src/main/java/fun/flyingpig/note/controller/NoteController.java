@@ -4,7 +4,7 @@ import fun.flyingpig.note.dto.NoteDTO;
 import fun.flyingpig.note.dto.NoteGroupAssignmentDTO;
 import fun.flyingpig.note.dto.Result;
 import fun.flyingpig.note.entity.Note;
-import fun.flyingpig.note.service.NoteService;
+import fun.flyingpig.note.service.note.NoteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import javax.validation.Valid;
