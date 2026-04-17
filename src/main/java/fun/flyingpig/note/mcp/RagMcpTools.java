@@ -37,17 +37,13 @@ public class RagMcpTools {
             String question,
 
             @McpToolParam(description = "要查询的知识库ID列表", required = true)
-            List<Long> knowledgeBaseIds,
-
-            @McpToolParam(description = "返回的最相关文档数量，默认为5", required = false)
-            Integer topK) {
+            List<Long> knowledgeBaseIds) {
 
         log.info("MCP Tool调用: rag_query, 问题: {}, 知识库IDs: {}", question, knowledgeBaseIds);
 
         RagQueryDTO queryDTO = new RagQueryDTO();
         queryDTO.setQuestion(question);
         queryDTO.setKnowledgeBaseIds(knowledgeBaseIds);
-        queryDTO.setTopK(topK);
 
         return ragService.answer(queryDTO);
     }

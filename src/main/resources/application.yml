@@ -47,6 +47,7 @@ logging:
   level:
     # 将mapper包的日志级别调高到error，避免输出SQL相关信息
     fun.flyingpig.note.mapper: debug
+    fun.flyingpig.note.mapper.NoteVectorIndexMapper: info
     root: info
     # MCP 调试日志
     org.springframework.ai.mcp: debug

@@ -50,7 +50,7 @@ public class NoteGroupController {
 
     @DeleteMapping("/{id}")
     public Result deleteGroup(@PathVariable Long id) {
-        boolean success = noteGroupService.deleteGroupAndReassign(id);
+        boolean success = noteGroupService.deleteGroupCascade(id);
         if (success) {
             return Result.success("删除成功");
         }

@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service.impl;
+package fun.flyingpig.note.service.qdrant;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
@@ -6,7 +6,6 @@ import com.alibaba.fastjson.JSONObject;
 import fun.flyingpig.note.config.QdrantProperties;
 import fun.flyingpig.note.dto.QdrantSearchResult;
 import fun.flyingpig.note.entity.QdrantPoint;
-import fun.flyingpig.note.service.QdrantService;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

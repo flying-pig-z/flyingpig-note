@@ -16,5 +16,5 @@ public interface NoteGroupService extends IService<NoteGroup> {
 
     NoteGroup moveGroup(Long id, Long parentId);
 
-    boolean deleteGroupAndReassign(Long id);
+    boolean deleteGroupCascade(Long id);
 }

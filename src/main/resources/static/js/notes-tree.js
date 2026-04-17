@@ -449,7 +449,7 @@ async function startRenameGroup(groupId) {
     }
 }
 
-async function deleteGroup(groupId) {
+async function deleteGroupLegacy(groupId) {
     const group = findGroupById(groupId);
     if (!group) {
         return;
@@ -494,6 +494,74 @@ async function deleteGroup(groupId) {
 function updateNoteCollectionsForGroupRemoval(groupId, parentId) {
     notes = notes.map((item) => item.groupId === groupId ? { ...item, groupId: parentId } : item);
     searchResults = searchResults.map((item) => item.groupId === groupId ? { ...item, groupId: parentId } : item);
+}
+
+function collectDescendantGroupIds(groupId) {
+    const groupIds = new Set();
+    const stack = [groupId];
+
+    while (stack.length > 0) {
+        const currentId = stack.pop();
+        if (groupIds.has(currentId)) {
+            continue;
+        }
+
+        groupIds.add(currentId);
+        noteGroups.forEach((group) => {
+            if (group.parentId === currentId) {
+                stack.push(group.id);
+            }
+        });
+    }
+
+    return groupIds;
+}
+
+async function deleteGroup(groupId) {
+    const group = findGroupById(groupId);
+    if (!group) {
+        return;
+    }
+
+    const result = await DialogUtils.dangerConfirm(
+        `确定删除分组 <strong>${escapeHtml(group.name)}</strong> 吗？<br><br><span style="color:#dc3545;">该分组下的所有子分组和文档都会一并删除，且不可恢复。</span>`,
+        '删除分组'
+    );
+
+    if (!result.isConfirmed) {
+        return;
+    }
+
+    try {
+        const parentId = group.parentId ?? null;
+        const removedGroupIds = collectDescendantGroupIds(groupId);
+        const removedNoteIds = new Set(
+            notes.filter((item) => removedGroupIds.has(item.groupId)).map((item) => item.id)
+        );
+
+        await groupAPI.delete(groupId);
+
+        noteGroups = noteGroups.filter((item) => !removedGroupIds.has(item.id));
+        notes = notes.filter((item) => !removedGroupIds.has(item.groupId));
+        searchResults = searchResults.filter((item) => !removedGroupIds.has(item.groupId));
+
+        if (selectedGroupId != null && removedGroupIds.has(selectedGroupId)) {
+            selectedGroupId = parentId;
+        }
+        if (currentNote && removedNoteIds.has(currentNote.id)) {
+            currentNote = null;
+            selectedGroupId = parentId;
+        }
+
+        renderNotesTree();
+        if (typeof refreshWorkspaceContext === 'function') {
+            refreshWorkspaceContext();
+        }
+        await DialogUtils.success('分组已删除', '删除成功');
+    } catch (error) {
+        console.error('删除分组失败:', error);
+        await DialogUtils.error(`删除失败: ${error.message}`);
+    }
 }
 
 async function startRenameNote(noteId) {

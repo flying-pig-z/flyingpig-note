@@ -1,11 +1,8 @@
-// 自定义提示框工具类
 class DialogUtils {
-    // 检查SweetAlert2是否可用
     static isSwalAvailable() {
         return typeof Swal !== 'undefined';
     }
 
-    // 成功提示
     static success(message, title = '成功') {
         if (!this.isSwalAvailable()) {
             alert(`${title}: ${message}`);
@@ -13,7 +10,7 @@ class DialogUtils {
         }
         return Swal.fire({
             icon: 'success',
-            title: title,
+            title,
             text: message,
             confirmButtonText: '确定',
             timer: 3000,
@@ -21,7 +18,6 @@ class DialogUtils {
         });
     }
 
-    // 错误提示
     static error(message, title = '错误') {
         if (!this.isSwalAvailable()) {
             alert(`${title}: ${message}`);
@@ -29,27 +25,12 @@ class DialogUtils {
         }
         return Swal.fire({
             icon: 'error',
-            title: title,
+            title,
             text: message,
             confirmButtonText: '确定'
         });
     }
 
-    // 警告提示
-    static warning(message, title = '警告') {
-        if (!this.isSwalAvailable()) {
-            alert(`${title}: ${message}`);
-            return Promise.resolve();
-        }
-        return Swal.fire({
-            icon: 'warning',
-            title: title,
-            text: message,
-            confirmButtonText: '确定'
-        });
-    }
-
-    // 信息提示
     static info(message, title = '提示') {
         if (!this.isSwalAvailable()) {
             alert(`${title}: ${message}`);
@@ -57,21 +38,19 @@ class DialogUtils {
         }
         return Swal.fire({
             icon: 'info',
-            title: title,
+            title,
             text: message,
             confirmButtonText: '确定'
         });
     }
 
-    // 确认对话框
     static confirm(message, title = '确认') {
         if (!this.isSwalAvailable()) {
-            const result = confirm(`${title}: ${message}`);
-            return Promise.resolve({ isConfirmed: result });
+            return Promise.resolve({ isConfirmed: confirm(`${title}: ${message}`) });
         }
         return Swal.fire({
             icon: 'question',
-            title: title,
+            title,
             text: message,
             showCancelButton: true,
             confirmButtonText: '确定',
@@ -79,36 +58,8 @@ class DialogUtils {
             reverseButtons: true
         });
     }
-
-    // 加载提示
-    static loading(message = '处理中...') {
-        if (!this.isSwalAvailable()) {
-            console.log(message);
-            return;
-        }
-        Swal.fire({
-            title: message,
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            allowEnterKey: false,
-            showConfirmButton: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
-    }
-
-    // 关闭加载提示
-    static closeLoading() {
-        if (!this.isSwalAvailable()) {
-            console.log('加载完成');
-            return;
-        }
-        Swal.close();
-    }
 }
 
-// API客户端类
 class ApiClient {
     constructor(baseURL = '/api') {
         this.baseURL = baseURL;
@@ -123,43 +74,38 @@ class ApiClient {
         }
 
         if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`;
+            headers.Authorization = `Bearer ${this.token}`;
         }
 
         return headers;
     }
 
     async request(url, options = {}) {
-        const fullUrl = `${this.baseURL}${url}`;
-
-        const config = {
+        const response = await fetch(`${this.baseURL}${url}`, {
             ...options,
             headers: {
                 ...this.getHeaders(!options.isFormData),
                 ...options.headers
             }
-        };
+        });
 
-        try {
-            const response = await fetch(fullUrl, config);
-
-            // 如果token过期或无效，跳转到登录页
-            if (response.status === 401) {
-                this.redirectToLogin();
-                throw new Error('认证失败，请重新登录');
-            }
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || '请求失败');
-            }
-
-            return data;
-        } catch (error) {
-            console.error('API请求失败:', error);
-            throw error;
+        if (response.status === 401) {
+            this.redirectToLogin();
+            throw new Error('认证失败，请重新登录');
         }
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (_) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(payload?.message || '请求失败');
+        }
+
+        return payload;
     }
 
     redirectToLogin() {
@@ -174,87 +120,135 @@ class ApiClient {
         return this.request(fullUrl);
     }
 
-    async post(url, data, isFormData = false) {
-        const options = {
+    async post(url, data) {
+        return this.request(url, {
             method: 'POST',
-            isFormData: isFormData
-        };
-
-        if (isFormData) {
-            options.body = data;
-        } else {
-            options.body = JSON.stringify(data);
-        }
-
-        return this.request(url, options);
-    }
-
-    async put(url, data) {
-        return this.request(url, {
-            method: 'PUT',
             body: JSON.stringify(data)
-        });
-    }
-
-    async delete(url) {
-        return this.request(url, {
-            method: 'DELETE'
         });
     }
 }
 
-// 创建API客户端实例
 const apiClient = new ApiClient();
 
-// 认证API
-const authAPI = {
-    async logout() {
-        try {
-            await apiClient.post('/auth/logout');
-        } finally {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userInfo');
-            window.location.href = 'index.html';
-        }
-    },
-
-    async getCurrentUser() {
-        const result = await apiClient.get('/auth/current');
-        return result.data;
-    }
-};
-
-// 知识库API
 const knowledgeBaseAPI = {
     async getList() {
         const result = await apiClient.get('/knowledge-bases');
         return result.data;
-    },
-
-    async search(keyword) {
-        const result = await apiClient.get('/knowledge-bases/search', { keyword });
-        return result.data;
     }
 };
 
-// RAG API
 const ragAPI = {
-    async updateIndex(knowledgeBaseId) {
-        const result = await apiClient.post('/rag/updateIndex', {
-            knowledgeBaseId
+    async streamIndexUpdate(knowledgeBaseId, isForce, onProgress) {
+        const path = isForce ? '/rag/forceUpdateIndex/stream' : '/rag/updateIndex/stream';
+        const response = await fetch(`${apiClient.baseURL}${path}`, {
+            method: 'POST',
+            headers: apiClient.getHeaders(),
+            body: JSON.stringify({ knowledgeBaseId })
         });
-        return result.data;
-    },
-    
-    async forceUpdateIndex(knowledgeBaseId) {
-        const result = await apiClient.post('/rag/forceUpdateIndex', {
-            knowledgeBaseId
-        });
-        return result.data;
+
+        if (response.status === 401) {
+            apiClient.redirectToLogin();
+            throw new Error('认证失败，请重新登录');
+        }
+
+        if (!response.ok) {
+            let message = '请求失败';
+            try {
+                const errorPayload = await response.json();
+                message = errorPayload?.message || message;
+            } catch (_) {
+                const errorText = await response.text();
+                if (errorText) {
+                    message = errorText;
+                }
+            }
+            throw new Error(message);
+        }
+
+        if (!response.body) {
+            throw new Error('浏览器不支持流式响应');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let finalPayload = null;
+
+        const consumeBufferedEvents = () => {
+            let delimiterIndex;
+            while ((delimiterIndex = buffer.indexOf('\n\n')) !== -1) {
+                const rawEvent = buffer.slice(0, delimiterIndex).trim();
+                buffer = buffer.slice(delimiterIndex + 2);
+
+                if (!rawEvent) {
+                    continue;
+                }
+
+                const parsedEvent = parseSseEvent(rawEvent);
+                if (!parsedEvent) {
+                    continue;
+                }
+
+                if (parsedEvent.event === 'progress') {
+                    if (typeof onProgress === 'function') {
+                        onProgress(parsedEvent.data);
+                    }
+                    continue;
+                }
+
+                if (parsedEvent.event === 'done') {
+                    finalPayload = parsedEvent.data;
+                    continue;
+                }
+
+                if (parsedEvent.event === 'error') {
+                    throw new Error(parsedEvent.data?.message || '索引更新失败');
+                }
+            }
+        };
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+            consumeBufferedEvents();
+        }
+
+        buffer += decoder.decode().replace(/\r\n/g, '\n');
+        consumeBufferedEvents();
+
+        if (buffer.trim()) {
+            const parsedEvent = parseSseEvent(buffer.trim());
+            if (parsedEvent?.event === 'done') {
+                finalPayload = parsedEvent.data;
+            } else if (parsedEvent?.event === 'error') {
+                throw new Error(parsedEvent.data?.message || '索引更新失败');
+            }
+        }
+
+        if (!finalPayload) {
+            throw new Error('未收到索引更新完成事件');
+        }
+
+        return finalPayload;
     }
 };
 
-// 认证守卫
+const state = {
+    knowledgeBases: [],
+    progressByKbId: new Map()
+};
+
+const elements = {
+    backToChatBtn: document.getElementById('backToChatBtn'),
+    refreshKbBtn: document.getElementById('refreshKbBtn'),
+    kbSearch: document.getElementById('kbSearch'),
+    knowledgeBases: document.getElementById('knowledgeBases')
+};
+
 function checkAuth() {
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -264,110 +258,88 @@ function checkAuth() {
     return true;
 }
 
-// 页面状态
-let knowledgeBases = [];
-
-// DOM元素引用
-const elements = {
-    backToChatBtn: document.getElementById('backToChatBtn'),
-    refreshKbBtn: document.getElementById('refreshKbBtn'),
-    kbSearch: document.getElementById('kbSearch'),
-    knowledgeBases: document.getElementById('knowledgeBases')
-};
-
-// 初始化页面
 async function initPage() {
-    if (!checkAuth()) return;
-
-    try {
-        // 加载知识库列表
-        await loadKnowledgeBases();
-
-        // 绑定事件监听器
-        bindEventListeners();
-
-    } catch (error) {
-        console.error('页面初始化失败:', error);
-        if (error.message.includes('认证失败')) {
-            return; // 已经跳转到登录页
-        }
-        await DialogUtils.error('页面加载失败: ' + error.message);
+    if (!checkAuth()) {
+        return;
     }
+
+    bindEventListeners();
+    await loadKnowledgeBases();
 }
 
-// 绑定事件监听器
 function bindEventListeners() {
-    // 返回聊天按钮事件
     elements.backToChatBtn.addEventListener('click', () => {
         window.location.href = 'chat.html';
     });
 
-    // 刷新知识库按钮事件
     elements.refreshKbBtn.addEventListener('click', async () => {
         await loadKnowledgeBases();
     });
 
-    // 知识库搜索事件
     elements.kbSearch.addEventListener('input', () => {
-        renderKnowledgeBases(elements.kbSearch.value);
+        renderKnowledgeBases();
     });
 }
 
-// 加载知识库列表
-async function loadKnowledgeBases() {
+async function loadKnowledgeBases(options = {}) {
+    const { silent = false } = options;
+
     try {
-        showLoading(true);
-        knowledgeBases = await knowledgeBaseAPI.getList();
+        if (!silent) {
+            showLoading();
+        }
+        state.knowledgeBases = await knowledgeBaseAPI.getList();
         renderKnowledgeBases();
     } catch (error) {
         console.error('加载知识库失败:', error);
-        await DialogUtils.error('加载知识库失败: ' + error.message);
-    } finally {
-        showLoading(false);
+        await DialogUtils.error(`加载知识库失败: ${error.message}`);
     }
 }
 
-// 显示加载状态
-function showLoading(show) {
-    if (show) {
-        elements.knowledgeBases.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #666;">
-                <i class="fas fa-spinner fa-spin fa-2x"></i>
-                <p style="margin-top: 15px;">加载中...</p>
-            </div>
-        `;
-    }
+function showLoading() {
+    elements.knowledgeBases.innerHTML = `
+        <div class="kb-empty-state">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p>加载中...</p>
+        </div>
+    `;
 }
 
-// 渲染知识库列表
-function renderKnowledgeBases(searchTerm = '') {
-    let filteredKbs = knowledgeBases;
+function renderKnowledgeBases() {
+    const keyword = (elements.kbSearch.value || '').trim().toLowerCase();
+    const filteredKbs = state.knowledgeBases.filter(kb => {
+        if (!keyword) {
+            return true;
+        }
 
-    // 确保searchTerm是字符串类型
-    const keyword = String(searchTerm || '').trim();
+        return `${kb.title || ''} ${kb.description || ''}`.toLowerCase().includes(keyword);
+    });
 
-    if (keyword) {
-        filteredKbs = knowledgeBases.filter(kb =>
-            (kb.title || '').toLowerCase().includes(keyword.toLowerCase()) ||
-            (kb.description || '').toLowerCase().includes(keyword.toLowerCase())
-        );
-    }
-
-    if (filteredKbs.length === 0) {
+    if (!filteredKbs.length) {
         elements.knowledgeBases.innerHTML = `
-            <div style="text-align: center; padding: 50px; color: #666;">
-                <i class="fas fa-folder-open fa-3x" style="margin-bottom: 20px;"></i>
+            <div class="kb-empty-state">
+                <i class="fas fa-folder-open fa-3x"></i>
                 <h3>${keyword ? '未找到匹配的知识库' : '暂无知识库'}</h3>
-                <p>${keyword ? '尝试使用其他关键词搜索' : '请先创建知识库'}</p>
+                <p>${keyword ? '换个关键词试试。' : '请先创建知识库。'}</p>
             </div>
         `;
         return;
     }
 
-    elements.knowledgeBases.innerHTML = filteredKbs.map(kb => `
-        <div class="kb-card fade-in">
-            <h3>${kb.title || '未命名知识库'}</h3>
-            <p>${kb.description || '暂无描述'}</p>
+    elements.knowledgeBases.innerHTML = filteredKbs.map(createKnowledgeBaseCard).join('');
+    bindKnowledgeBaseActions();
+    syncAllProgressCards();
+}
+
+function createKnowledgeBaseCard(kb) {
+    const progress = state.progressByKbId.get(kb.id);
+    const isBusy = Boolean(progress);
+    const disableAllActions = isAnyIndexTaskRunning();
+
+    return `
+        <div class="kb-card fade-in" data-kb-card-id="${kb.id}">
+            <h3>${escapeHtml(kb.title || '未命名知识库')}</h3>
+            <p>${escapeHtml(kb.description || '暂无描述')}</p>
             <div class="info">
                 <div class="info-item">
                     <span class="info-label">笔记数量:</span>
@@ -375,141 +347,290 @@ function renderKnowledgeBases(searchTerm = '') {
                 </div>
                 <div class="info-item">
                     <span class="info-label">索引更新时间:</span>
-                    <span class="info-value" id="indexTime-${kb.id}">${formatDateTime(kb.indexUpdateTime) || '从未更新'}</span>
+                    <span class="info-value" id="indexTime-${kb.id}">${formatDateTime(kb.indexUpdateTime)}</span>
                 </div>
             </div>
+            ${createProgressMarkup(kb.id, progress)}
             <div class="actions">
-                <button class="btn btn-primary update-index-btn" data-id="${kb.id}">
-                    <i class="fas fa-sync"></i>
-                    增量更新
+                <button class="btn btn-primary update-index-btn" data-id="${kb.id}" ${disableAllActions ? 'disabled' : ''}>
+                    ${isBusy && !progress.forceUpdate ? '<i class="fas fa-spinner fa-spin"></i> 更新中...' : '<i class="fas fa-sync"></i> 增量更新'}
                 </button>
-                <button class="btn btn-danger force-update-index-btn" data-id="${kb.id}">
-                    <i class="fas fa-redo"></i>
-                    强制更新
+                <button class="btn btn-danger force-update-index-btn" data-id="${kb.id}" ${disableAllActions ? 'disabled' : ''}>
+                    ${isBusy && progress.forceUpdate ? '<i class="fas fa-spinner fa-spin"></i> 更新中...' : '<i class="fas fa-redo"></i> 强制更新'}
                 </button>
             </div>
         </div>
-    `).join('');
+    `;
+}
 
-    // 添加按钮事件监听器
-    document.querySelectorAll('.update-index-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const kbId = parseInt(e.target.closest('.update-index-btn').getAttribute('data-id'));
+function createProgressMarkup(kbId, progress) {
+    if (!progress) {
+        return '';
+    }
+
+    return `
+        <div class="kb-progress is-visible" id="kbProgress-${kbId}">
+            <div class="kb-progress-top">
+                <span class="kb-progress-message" id="progressMessage-${kbId}">${escapeHtml(progress.message || '准备中...')}</span>
+                <span class="kb-progress-percent" id="progressPercent-${kbId}">${formatProgressPercent(progress.progressPercent)}</span>
+            </div>
+            <div class="kb-progress-bar">
+                <div class="kb-progress-fill" id="progressFill-${kbId}" style="width: ${clampProgress(progress.progressPercent)}%;"></div>
+            </div>
+            <div class="kb-progress-stats" id="progressStats-${kbId}">${escapeHtml(formatProgressStats(progress))}</div>
+            <div class="kb-progress-note ${progress.currentNoteTitle ? 'is-visible' : ''}" id="progressNote-${kbId}">
+                ${progress.currentNoteTitle ? `当前: ${escapeHtml(progress.currentNoteTitle)}` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function bindKnowledgeBaseActions() {
+    document.querySelectorAll('.update-index-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            const kbId = Number(button.dataset.id);
             await updateIndex(kbId, false);
         });
     });
 
-    document.querySelectorAll('.force-update-index-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            const kbId = parseInt(e.target.closest('.force-update-index-btn').getAttribute('data-id'));
+    document.querySelectorAll('.force-update-index-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            const kbId = Number(button.dataset.id);
             await updateIndex(kbId, true);
         });
     });
 }
 
-// 格式化日期时间
-function formatDateTime(dateStr) {
-    if (!dateStr) return '从未更新';
-    
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now - date;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    
-    if (days === 0) return `今天 ${hours}:${minutes}`;
-    if (days === 1) return `昨天 ${hours}:${minutes}`;
-    if (days < 7) return `${days}天前 ${hours}:${minutes}`;
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
+function syncAllProgressCards() {
+    state.progressByKbId.forEach((progress, kbId) => {
+        syncProgressCard(kbId, progress);
+    });
 }
 
-// 更新索引
-async function updateIndex(kbId, isForce) {
-    try {
-        // 找到对应的知识库
-        const kb = knowledgeBases.find(k => k.id === kbId);
-        if (!kb) {
-            throw new Error('未找到知识库');
-        }
-        
-        const actionText = isForce ? '强制更新' : '增量更新';
-        const confirmResult = await DialogUtils.confirm(
-            `确定要对知识库 "${kb.title || '未命名知识库'}" 进行${actionText}吗？`,
-            `${actionText}确认`
-        );
-        
-        if (!confirmResult.isConfirmed) return;
-        
-        // 禁用按钮
-        const updateBtn = document.querySelector(`.update-index-btn[data-id="${kbId}"]`);
-        const forceUpdateBtn = document.querySelector(`.force-update-index-btn[data-id="${kbId}"]`);
-        
-        if (updateBtn) {
-            updateBtn.disabled = true;
-            updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
-        }
-        
-        if (forceUpdateBtn) {
-            forceUpdateBtn.disabled = true;
-            forceUpdateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 更新中...';
-        }
-        
-        DialogUtils.loading(`${actionText}中...`);
-        
-        // 调用API
-        let result;
-        if (isForce) {
-            result = await ragAPI.forceUpdateIndex(kbId);
-        } else {
-            result = await ragAPI.updateIndex(kbId);
-        }
-        
-        DialogUtils.closeLoading();
-        
-        // 更新成功提示
-        let message = `${actionText}完成!\n`;
-        message += `新增: ${result.insertedCount} 篇\n`;
-        message += `更新: ${result.updatedCount} 篇\n`;
-        message += `跳过: ${result.skippedCount} 篇`;
-        
-        if (isForce) {
-            message = `${actionText}完成!\n重建: ${result.insertedCount} 篇索引`;
-        }
-        
-        await DialogUtils.success(message, '更新成功');
-        
-        // 更新索引时间显示
-        const indexTimeElement = document.getElementById(`indexTime-${kbId}`);
-        if (indexTimeElement) {
-            // 重新加载知识库列表以获取最新的索引时间
-            await loadKnowledgeBases();
-        }
-    } catch (error) {
-        console.error('更新索引失败:', error);
-        DialogUtils.closeLoading();
-        await DialogUtils.error('更新失败: ' + error.message, '更新失败');
-    } finally {
-        // 重新启用按钮
-        const updateBtn = document.querySelector(`.update-index-btn[data-id="${kbId}"]`);
-        const forceUpdateBtn = document.querySelector(`.force-update-index-btn[data-id="${kbId}"]`);
-        
-        if (updateBtn) {
-            updateBtn.disabled = false;
-            updateBtn.innerHTML = '<i class="fas fa-sync"></i> 增量更新';
-        }
-        
-        if (forceUpdateBtn) {
-            forceUpdateBtn.disabled = false;
-            forceUpdateBtn.innerHTML = '<i class="fas fa-redo"></i> 强制更新';
-        }
+function syncProgressCard(kbId, progress = state.progressByKbId.get(kbId)) {
+    if (!progress) {
+        return;
+    }
+
+    const messageElement = document.getElementById(`progressMessage-${kbId}`);
+    const percentElement = document.getElementById(`progressPercent-${kbId}`);
+    const fillElement = document.getElementById(`progressFill-${kbId}`);
+    const statsElement = document.getElementById(`progressStats-${kbId}`);
+    const noteElement = document.getElementById(`progressNote-${kbId}`);
+
+    if (!messageElement || !percentElement || !fillElement || !statsElement || !noteElement) {
+        return;
+    }
+
+    messageElement.textContent = progress.message || '处理中...';
+    percentElement.textContent = formatProgressPercent(progress.progressPercent);
+    fillElement.style.width = `${clampProgress(progress.progressPercent)}%`;
+    statsElement.textContent = formatProgressStats(progress);
+
+    if (progress.currentNoteTitle) {
+        noteElement.textContent = `当前: ${progress.currentNoteTitle}`;
+        noteElement.classList.add('is-visible');
+    } else {
+        noteElement.textContent = '';
+        noteElement.classList.remove('is-visible');
     }
 }
 
-// 页面加载时初始化
+function setProgressState(kbId, progress) {
+    state.progressByKbId.set(kbId, normalizeProgress(progress));
+}
+
+function clearProgressState(kbId) {
+    state.progressByKbId.delete(kbId);
+}
+
+function normalizeProgress(progress = {}) {
+    return {
+        knowledgeBaseId: progress.knowledgeBaseId ?? null,
+        forceUpdate: Boolean(progress.forceUpdate),
+        stage: progress.stage || 'PREPARING',
+        message: progress.message || '准备中...',
+        totalNotes: Number(progress.totalNotes ?? 0),
+        processedNotes: Number(progress.processedNotes ?? 0),
+        insertedCount: Number(progress.insertedCount ?? 0),
+        updatedCount: Number(progress.updatedCount ?? 0),
+        skippedCount: Number(progress.skippedCount ?? 0),
+        deletedCount: Number(progress.deletedCount ?? 0),
+        progressPercent: clampProgress(progress.progressPercent ?? 0),
+        currentNoteId: progress.currentNoteId ?? null,
+        currentNoteTitle: progress.currentNoteTitle || '',
+        currentAction: progress.currentAction || ''
+    };
+}
+
+function isAnyIndexTaskRunning() {
+    return state.progressByKbId.size > 0;
+}
+
+async function updateIndex(kbId, isForce) {
+    if (isAnyIndexTaskRunning()) {
+        await DialogUtils.info('当前已有索引任务在执行，请等待完成后再操作。');
+        return;
+    }
+
+    const kb = state.knowledgeBases.find(item => item.id === kbId);
+    if (!kb) {
+        await DialogUtils.error('未找到目标知识库');
+        return;
+    }
+
+    const actionText = isForce ? '强制更新' : '增量更新';
+    const confirmResult = await DialogUtils.confirm(
+        `确定要对知识库“${kb.title || '未命名知识库'}”执行${actionText}吗？`,
+        `${actionText}确认`
+    );
+
+    if (!confirmResult.isConfirmed) {
+        return;
+    }
+
+    setProgressState(kbId, {
+        forceUpdate: isForce,
+        stage: 'PREPARING',
+        message: isForce ? '准备强制更新任务...' : '准备增量更新任务...',
+        totalNotes: 0,
+        processedNotes: 0,
+        insertedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        deletedCount: 0,
+        progressPercent: 0,
+        currentNoteTitle: ''
+    });
+    renderKnowledgeBases();
+
+    try {
+        const result = await ragAPI.streamIndexUpdate(kbId, isForce, progress => {
+            setProgressState(kbId, progress);
+            syncProgressCard(kbId);
+        });
+
+        setProgressState(kbId, {
+            ...state.progressByKbId.get(kbId),
+            stage: 'COMPLETED',
+            message: isForce ? '强制更新完成' : '索引更新完成',
+            progressPercent: 100,
+            totalNotes: state.progressByKbId.get(kbId)?.totalNotes ?? 0,
+            processedNotes: state.progressByKbId.get(kbId)?.totalNotes ?? state.progressByKbId.get(kbId)?.processedNotes ?? 0
+        });
+        syncProgressCard(kbId);
+
+        await loadKnowledgeBases({ silent: true });
+
+        const summary = isForce
+            ? `强制更新完成\n重建: ${result.insertedCount} 篇索引`
+            : `增量更新完成\n新增: ${result.insertedCount} 篇\n更新: ${result.updatedCount} 篇\n跳过: ${result.skippedCount} 篇\n清理: ${result.deletedCount} 篇`;
+
+        await DialogUtils.success(summary, '索引更新成功');
+    } catch (error) {
+        console.error('索引更新失败:', error);
+        await DialogUtils.error(`索引更新失败: ${error.message}`);
+    } finally {
+        clearProgressState(kbId);
+        renderKnowledgeBases();
+    }
+}
+
+function parseSseEvent(rawEvent) {
+    const lines = rawEvent.split('\n');
+    let event = 'message';
+    const dataLines = [];
+
+    lines.forEach(line => {
+        if (line.startsWith('event:')) {
+            event = line.substring(6).trim();
+            return;
+        }
+
+        if (line.startsWith('data:')) {
+            dataLines.push(line.substring(5).trim());
+        }
+    });
+
+    if (!dataLines.length) {
+        return null;
+    }
+
+    const rawData = dataLines.join('\n');
+    try {
+        return {
+            event,
+            data: JSON.parse(rawData)
+        };
+    } catch (_) {
+        return {
+            event,
+            data: { content: rawData }
+        };
+    }
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr) {
+        return '从未更新';
+    }
+
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) {
+        return '从未更新';
+    }
+
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    if (days === 0) {
+        return `今天 ${hours}:${minutes}`;
+    }
+    if (days === 1) {
+        return `昨天 ${hours}:${minutes}`;
+    }
+    if (days < 7) {
+        return `${days}天前 ${hours}:${minutes}`;
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function formatProgressStats(progress) {
+    const totalNotes = Number(progress.totalNotes ?? 0);
+    const processedNotes = Number(progress.processedNotes ?? 0);
+    const processedSummary = totalNotes > 0
+        ? `进度 ${Math.min(processedNotes, totalNotes)}/${totalNotes}`
+        : '等待统计笔记数';
+
+    return `${processedSummary} · 新增 ${progress.insertedCount || 0} · 更新 ${progress.updatedCount || 0} · 跳过 ${progress.skippedCount || 0} · 清理 ${progress.deletedCount || 0}`;
+}
+
+function formatProgressPercent(value) {
+    return `${clampProgress(value)}%`;
+}
+
+function clampProgress(value) {
+    const number = Number(value);
+    if (Number.isNaN(number)) {
+        return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(number)));
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 document.addEventListener('DOMContentLoaded', initPage);

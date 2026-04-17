@@ -1,4 +1,4 @@
-package fun.flyingpig.note.service;
+package fun.flyingpig.note.service.qdrant;
 
 import fun.flyingpig.note.dto.QdrantSearchResult;
 import fun.flyingpig.note.entity.QdrantPoint;

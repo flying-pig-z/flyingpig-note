@@ -3,22 +3,37 @@ package fun.flyingpig.note.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import fun.flyingpig.note.dto.NoteGroupDTO;
+import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.entity.NoteGroup;
+import fun.flyingpig.note.entity.NoteVectorIndex;
 import fun.flyingpig.note.exception.BusinessException;
 import fun.flyingpig.note.mapper.NoteGroupMapper;
 import fun.flyingpig.note.mapper.NoteMapper;
+import fun.flyingpig.note.service.INoteVectorIndexService;
+import fun.flyingpig.note.service.KnowledgeBaseService;
 import fun.flyingpig.note.service.NoteGroupService;
+import fun.flyingpig.note.service.qdrant.QdrantService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class NoteGroupServiceImpl extends ServiceImpl<NoteGroupMapper, NoteGroup> implements NoteGroupService {
 
     @Autowired
     private NoteMapper noteMapper;
+
+    @Autowired
+    private KnowledgeBaseService knowledgeBaseService;
+
+    @Autowired
+    private INoteVectorIndexService noteVectorIndexService;
+
+    @Autowired
+    private QdrantService qdrantService;
 
     @Override
     public List<NoteGroup> getKnowledgeBaseGroups(Long knowledgeBaseId) {
@@ -91,18 +106,39 @@ public class NoteGroupServiceImpl extends ServiceImpl<NoteGroupMapper, NoteGroup
 
     @Override
     @Transactional
-    public boolean deleteGroupAndReassign(Long id) {
+    public boolean deleteGroupCascade(Long id) {
         NoteGroup group = this.getById(id);
         if (group == null) {
             return false;
         }
 
-        Long parentId = group.getParentId();
+        List<NoteGroup> groups = getKnowledgeBaseGroups(group.getKnowledgeBaseId());
+        Map<Long, List<Long>> childrenMap = buildChildrenMap(groups);
+        Set<Long> groupIdsToDelete = collectDescendantGroupIds(id, childrenMap);
 
-        this.baseMapper.updateParentIdByParentId(id, parentId);
-        noteMapper.updateGroupIdByGroupId(id, parentId);
+        LambdaQueryWrapper<Note> noteQueryWrapper = new LambdaQueryWrapper<>();
+        noteQueryWrapper.in(Note::getGroupId, groupIdsToDelete);
+        List<Note> notesToDelete = noteMapper.selectList(noteQueryWrapper);
 
-        return this.removeById(id);
+        if (!notesToDelete.isEmpty()) {
+            List<Long> noteIdsToDelete = notesToDelete.stream()
+                    .map(Note::getId)
+                    .collect(Collectors.toList());
+
+            LambdaQueryWrapper<NoteVectorIndex> vectorIndexDeleteWrapper = new LambdaQueryWrapper<>();
+            vectorIndexDeleteWrapper.in(NoteVectorIndex::getNoteId, noteIdsToDelete);
+            noteVectorIndexService.remove(vectorIndexDeleteWrapper);
+
+            noteIdsToDelete.forEach(qdrantService::deleteByNoteId);
+
+            LambdaQueryWrapper<Note> noteDeleteWrapper = new LambdaQueryWrapper<>();
+            noteDeleteWrapper.in(Note::getId, noteIdsToDelete);
+            noteMapper.delete(noteDeleteWrapper);
+
+            knowledgeBaseService.updateNoteCount(group.getKnowledgeBaseId(), -noteIdsToDelete.size());
+        }
+
+        return this.removeByIds(groupIdsToDelete);
     }
 
     private Map<Long, List<Long>> buildChildrenMap(List<NoteGroup> groups) {
@@ -129,5 +165,24 @@ public class NoteGroupServiceImpl extends ServiceImpl<NoteGroupMapper, NoteGroup
             }
         }
         return false;
+    }
+
+    private Set<Long> collectDescendantGroupIds(Long rootGroupId, Map<Long, List<Long>> childrenMap) {
+        Set<Long> groupIds = new LinkedHashSet<>();
+        Deque<Long> stack = new ArrayDeque<>();
+        stack.push(rootGroupId);
+
+        while (!stack.isEmpty()) {
+            Long currentId = stack.pop();
+            if (!groupIds.add(currentId)) {
+                continue;
+            }
+
+            for (Long childId : childrenMap.getOrDefault(currentId, Collections.emptyList())) {
+                stack.push(childId);
+            }
+        }
+
+        return groupIds;
     }
 }

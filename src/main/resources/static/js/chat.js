@@ -239,22 +239,161 @@ const knowledgeBaseAPI = {
 
 // RAG API
 const ragAPI = {
-    async answer(question, knowledgeBaseIds, topK = 5) {
+    async answer(question, knowledgeBaseIds, history = []) {
         const result = await apiClient.post('/rag/answer', {
             question,
             knowledgeBaseIds,
-            topK
+            history
         });
         return result;
+    },
+
+    async answerStream(question, knowledgeBaseIds, history = [], onDelta) {
+        const response = await fetch(`${apiClient.baseURL}/rag/answer/stream`, {
+            method: 'POST',
+            headers: apiClient.getHeaders(),
+            body: JSON.stringify({
+                question,
+                knowledgeBaseIds,
+                history
+            })
+        });
+
+        if (response.status === 401) {
+            apiClient.redirectToLogin();
+            throw new Error('认证失败，请重新登录');
+        }
+
+        if (!response.ok) {
+            let message = '请求失败';
+            try {
+                const errorBody = await response.json();
+                message = errorBody.message || message;
+            } catch (_) {
+                const errorText = await response.text();
+                if (errorText) {
+                    message = errorText;
+                }
+            }
+            throw new Error(message);
+        }
+
+        if (!response.body) {
+            throw new Error('浏览器不支持流式响应');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let finalPayload = null;
+        const consumeBufferedEvents = () => {
+            let delimiterIndex;
+            while ((delimiterIndex = buffer.indexOf('\n\n')) !== -1) {
+                const rawEvent = buffer.slice(0, delimiterIndex).trim();
+                buffer = buffer.slice(delimiterIndex + 2);
+
+                if (!rawEvent) {
+                    continue;
+                }
+
+                const parsedEvent = parseSseEvent(rawEvent);
+                if (!parsedEvent) {
+                    continue;
+                }
+
+                if (parsedEvent.event === 'delta') {
+                    const chunk = parsedEvent.data?.content || '';
+                    if (chunk && typeof onDelta === 'function') {
+                        onDelta(chunk);
+                    }
+                    continue;
+                }
+
+                if (parsedEvent.event === 'done') {
+                    finalPayload = parsedEvent.data;
+                    continue;
+                }
+
+                if (parsedEvent.event === 'error') {
+                    throw new Error(parsedEvent.data?.message || '流式响应失败');
+                }
+            }
+        };
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+            consumeBufferedEvents();
+        }
+
+        buffer += decoder.decode().replace(/\r\n/g, '\n');
+        consumeBufferedEvents();
+
+        if (buffer.trim()) {
+            const parsedEvent = parseSseEvent(buffer.trim());
+            if (parsedEvent?.event === 'done') {
+                finalPayload = parsedEvent.data;
+            } else if (parsedEvent?.event === 'error') {
+                throw new Error(parsedEvent.data?.message || '流式响应失败');
+            }
+        }
+
+        if (!finalPayload) {
+            throw new Error('流式响应已结束，但未收到完成事件');
+        }
+
+        return finalPayload;
     }
 };
 
 // 页面状态
+const MAX_HISTORY_ROUNDS = 4;
+const MAX_HISTORY_MESSAGES = MAX_HISTORY_ROUNDS * 2;
+let hasConfiguredMarked = false;
 let knowledgeBases = [];
 let currentUser = null;
+let conversationHistory = [];
 let selectedKnowledgeBaseIds = []; // 选中的知识库ID列表
 
 // DOM元素引用
+function parseSseEvent(rawEvent) {
+    const lines = rawEvent.split('\n');
+    let event = 'message';
+    const dataLines = [];
+
+    lines.forEach(line => {
+        if (line.startsWith('event:')) {
+            event = line.substring(6).trim();
+            return;
+        }
+
+        if (line.startsWith('data:')) {
+            dataLines.push(line.substring(5).trim());
+        }
+    });
+
+    if (dataLines.length === 0) {
+        return null;
+    }
+
+    const rawData = dataLines.join('\n');
+    try {
+        return {
+            event,
+            data: JSON.parse(rawData)
+        };
+    } catch (_) {
+        return {
+            event,
+            data: { content: rawData }
+        };
+    }
+}
+
 const elements = {
     backToKbBtn: document.getElementById('backToKbBtn'),
     refreshKbBtn: document.getElementById('refreshKbBtn'),
@@ -536,34 +675,30 @@ async function sendMessage() {
     elements.sendBtn.disabled = true;
     elements.sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 处理中';
 
+    let streamingMessage = null;
     try {
         // 添加AI思考中的消息
-        const aiThinkingMessageElement = addAiThinkingMessage();
+        streamingMessage = addAiThinkingMessage();
+        const history = getRecentConversationHistory();
+        let streamedAnswer = '';
 
         // 调用RAG API
-        const response = await ragAPI.answer(cleanMessage, knowledgeBaseIds);
-        const answer = response.data;
+        const answer = await ragAPI.answerStream(cleanMessage, knowledgeBaseIds, history, (chunk) => {
+            streamedAnswer += chunk;
+            updateAiThinkingMessage(streamingMessage, streamedAnswer);
+        });
 
         // 移除思考中的消息
-        aiThinkingMessageElement.remove();
 
         // 添加AI回复到聊天界面，并附带相关文档信息
-        let answerWithReferences = answer.answer;
-        if (answer.relevantDocuments && answer.relevantDocuments.length > 0) {
-            // 按noteTitle去重
-            const uniqueDocTitles = [...new Set(
-                answer.relevantDocuments.map(doc => doc.noteTitle || '未命名笔记')
-            )];
-            answerWithReferences += '\n\n参考文档:\n';
-            uniqueDocTitles.forEach((title, index) => {
-                answerWithReferences += `${index + 1}. ${title}\n`;
-            });
-        }
-        addMessageToChat(answerWithReferences, 'ai');
+        pushConversationMessage('user', cleanMessage);
+        pushConversationMessage('assistant', answer.answer);
+        const answerWithReferences = buildAnswerWithReferences(answer);
+        updateAiThinkingMessage(streamingMessage, answerWithReferences, true);
     } catch (error) {
         console.error('发送消息失败:', error);
         // 移除思考中的消息
-        const thinkingElement = document.getElementById('ai-thinking-message');
+        const thinkingElement = streamingMessage?.messageElement || document.getElementById('ai-thinking-message');
         if (thinkingElement) thinkingElement.remove();
 
         addMessageToChat(`抱歉，处理您的问题时出现错误: ${error.message}`, 'ai');
@@ -575,13 +710,51 @@ async function sendMessage() {
 }
 
 // 添加消息到聊天界面
+function getRecentConversationHistory() {
+    return conversationHistory.slice(-MAX_HISTORY_MESSAGES).map(message => ({
+        role: message.role,
+        content: message.content
+    }));
+}
+
+function pushConversationMessage(role, content) {
+    if (!content) {
+        return;
+    }
+
+    conversationHistory.push({
+        role,
+        content
+    });
+
+    if (conversationHistory.length > MAX_HISTORY_MESSAGES) {
+        conversationHistory = conversationHistory.slice(-MAX_HISTORY_MESSAGES);
+    }
+}
+
+function buildAnswerWithReferences(answer) {
+    let answerWithReferences = answer?.answer || '';
+
+    if (answer.relevantDocuments && answer.relevantDocuments.length > 0) {
+        const uniqueDocTitles = [...new Set(
+            answer.relevantDocuments.map(doc => doc.noteTitle || '未命名笔记')
+        )];
+        answerWithReferences += '\n\n---\n### 参考文档\n';
+        uniqueDocTitles.forEach((title, index) => {
+            answerWithReferences += `${index + 1}. ${title}\n`;
+        });
+    }
+
+    return answerWithReferences;
+}
+
 function addMessageToChat(content, sender) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${sender}-message`;
 
     const contentElement = document.createElement('div');
     contentElement.className = 'message-content';
-    contentElement.innerHTML = formatMessageContent(content);
+    renderMessageContent(contentElement, content, { sender });
 
     const metaElement = document.createElement('div');
     metaElement.className = 'message-meta';
@@ -603,7 +776,7 @@ function addAiThinkingMessage() {
     messageElement.id = 'ai-thinking-message';
 
     const contentElement = document.createElement('div');
-    contentElement.className = 'message-content';
+    contentElement.className = 'message-content markdown-body is-streaming';
     contentElement.innerHTML = `
         <div class="loading-dots">
             <span>●</span>
@@ -612,13 +785,38 @@ function addAiThinkingMessage() {
         </div>
     `;
 
+    const metaElement = document.createElement('div');
+    metaElement.className = 'message-meta';
+
     messageElement.appendChild(contentElement);
+    messageElement.appendChild(metaElement);
     elements.chatMessages.appendChild(messageElement);
 
     // 滚动到底部
     scrollToBottom();
 
-    return messageElement;
+    return {
+        messageElement,
+        contentElement,
+        metaElement
+    };
+}
+
+function updateAiThinkingMessage(streamingMessage, content, finished = false) {
+    if (!streamingMessage || !streamingMessage.contentElement) {
+        return;
+    }
+
+    renderMessageContent(streamingMessage.contentElement, content || '', {
+        sender: 'ai',
+        streaming: !finished
+    });
+    if (finished && streamingMessage.metaElement) {
+        streamingMessage.metaElement.textContent = getCurrentTimeString();
+        streamingMessage.messageElement.removeAttribute('id');
+    }
+
+    scrollToBottom();
 }
 
 // 添加相关文档信息
@@ -627,7 +825,36 @@ function addRelatedDocuments(documents) {
 }
 
 // 格式化消息内容
-function formatMessageContent(content) {
+function renderMessageContent(contentElement, content, options = {}) {
+    if (!contentElement) {
+        return;
+    }
+
+    const {
+        sender = 'ai',
+        streaming = false
+    } = options;
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+    const enableMarkdown = sender === 'ai';
+
+    contentElement.classList.toggle('markdown-body', enableMarkdown);
+    contentElement.classList.toggle('is-streaming', enableMarkdown && streaming);
+
+    if (streaming && !safeContent.trim()) {
+        contentElement.innerHTML = `
+            <div class="loading-dots">
+                <span>&#9679;</span>
+                <span>&#9679;</span>
+                <span>&#9679;</span>
+            </div>
+        `;
+        return;
+    }
+
+    contentElement.innerHTML = formatMessageContent(safeContent, { enableMarkdown });
+}
+
+function legacyFormatMessageContent(content, options = {}) {
     // 使用 marked.js 库来解析 Markdown
     if (typeof marked !== 'undefined') {
         try {
@@ -651,7 +878,7 @@ function formatMessageContent(content) {
 }
 
 // 转义HTML特殊字符
-function escapeHtml(text) {
+function legacyEscapeHtml(text) {
     const map = {
         '&': '&amp;',
         '<': '&lt;',
@@ -663,7 +890,427 @@ function escapeHtml(text) {
     return text.replace(/[&<>"']/g, function(m) { return map[m]; });
 }
 
+function configureMarked() {
+    if (hasConfiguredMarked) {
+        return;
+    }
+
+    marked.setOptions({
+        breaks: true,
+        gfm: true,
+        smartLists: true,
+        smartypants: true
+    });
+
+    hasConfiguredMarked = true;
+}
+
+function enhanceMarkdownHtml(rawHtml) {
+    const container = document.createElement('div');
+    container.innerHTML = rawHtml;
+
+    container.querySelectorAll('script, iframe, object, embed, form').forEach(element => {
+        element.remove();
+    });
+
+    container.querySelectorAll('*').forEach(element => {
+        [...element.attributes].forEach(attribute => {
+            if (/^on/i.test(attribute.name)) {
+                element.removeAttribute(attribute.name);
+            }
+        });
+    });
+
+    container.querySelectorAll('a').forEach(link => {
+        const href = link.getAttribute('href') || '';
+        if (/^\s*javascript:/i.test(href)) {
+            link.removeAttribute('href');
+            return;
+        }
+
+        if (href && !href.startsWith('#')) {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+        }
+    });
+
+    container.querySelectorAll('img').forEach(image => {
+        image.setAttribute('loading', 'lazy');
+        image.setAttribute('referrerpolicy', 'no-referrer');
+        image.setAttribute('alt', image.getAttribute('alt') || 'markdown image');
+    });
+
+    container.querySelectorAll('table').forEach(table => {
+        if (table.parentElement?.classList.contains('table-wrapper')) {
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrapper';
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    });
+
+    container.querySelectorAll('pre > code').forEach(codeElement => {
+        const preElement = codeElement.parentElement;
+        if (!preElement || preElement.parentElement?.classList.contains('code-block')) {
+            return;
+        }
+
+        const codeBlock = document.createElement('div');
+        codeBlock.className = 'code-block';
+
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+
+        const language = document.createElement('span');
+        language.className = 'code-language';
+        language.textContent = getCodeLanguageLabel(codeElement);
+
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'code-copy-btn';
+        copyButton.textContent = '复制';
+
+        header.appendChild(language);
+        header.appendChild(copyButton);
+
+        preElement.parentNode.insertBefore(codeBlock, preElement);
+        codeBlock.appendChild(header);
+        codeBlock.appendChild(preElement);
+    });
+
+    container.querySelectorAll('p').forEach(paragraph => {
+        if (!paragraph.textContent.trim() && paragraph.children.length === 0) {
+            paragraph.remove();
+        }
+    });
+
+    return container.innerHTML;
+}
+
+function getCodeLanguageLabel(codeElement) {
+    const languageClass = [...codeElement.classList]
+        .find(className => className.startsWith('language-'));
+    const language = languageClass ? languageClass.replace('language-', '') : '';
+
+    if (!language) {
+        return 'TEXT';
+    }
+
+    return language.length <= 12 ? language.toUpperCase() : language;
+}
+
+async function handleChatMessageActions(event) {
+    const copyButton = event.target.closest('.code-copy-btn');
+    if (!copyButton) {
+        return;
+    }
+
+    const codeElement = copyButton.closest('.code-block')?.querySelector('pre > code');
+    const codeText = codeElement?.textContent || '';
+    if (!codeText) {
+        return;
+    }
+
+    try {
+        await copyTextToClipboard(codeText);
+        copyButton.textContent = '已复制';
+        copyButton.classList.add('copied');
+        window.setTimeout(() => {
+            copyButton.textContent = '复制';
+            copyButton.classList.remove('copied');
+        }, 1600);
+    } catch (error) {
+        console.warn('复制代码失败:', error);
+        DialogUtils.error('复制代码失败，请手动复制', '复制失败');
+    }
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.setAttribute('readonly', 'readonly');
+    textArea.style.position = 'fixed';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+}
+
+function formatMessageContent(content, options = {}) {
+    const { enableMarkdown = true } = options;
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+
+    if (!enableMarkdown) {
+        return escapeHtml(safeContent).replace(/\n/g, '<br>');
+    }
+
+    if (typeof marked !== 'undefined') {
+        try {
+            configureMarked();
+            return enhanceMarkdownHtml(marked.parse(safeContent));
+        } catch (e) {
+            console.warn('Markdown解析失败，使用纯文本显示:', e);
+        }
+    }
+
+    return escapeHtml(safeContent).replace(/\n/g, '<br>');
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+
+    return String(text ?? '').replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
 // 获取当前时间字符串
+function buildAnswerWithReferences(answer) {
+    let answerWithReferences = answer?.answer || '';
+
+    if (answer.relevantDocuments && answer.relevantDocuments.length > 0) {
+        const uniqueDocTitles = [...new Set(
+            answer.relevantDocuments.map(doc => doc.noteTitle || '\u672a\u547d\u540d\u7b14\u8bb0')
+        )];
+        answerWithReferences += '\n\n---\n### \u53c2\u8003\u6587\u6863\n';
+        uniqueDocTitles.forEach((title, index) => {
+            answerWithReferences += `${index + 1}. ${title}\n`;
+        });
+    }
+
+    return answerWithReferences;
+}
+
+function addMessageToChat(content, sender) {
+    const messageElement = document.createElement('div');
+    messageElement.className = `message ${sender}-message`;
+
+    const contentElement = document.createElement('div');
+    contentElement.className = 'message-content';
+    renderMessageContent(contentElement, content, { sender });
+
+    const metaElement = document.createElement('div');
+    metaElement.className = 'message-meta';
+    metaElement.textContent = getCurrentTimeString();
+
+    messageElement.appendChild(contentElement);
+    messageElement.appendChild(metaElement);
+    elements.chatMessages.appendChild(messageElement);
+    scrollToBottom();
+}
+
+function addAiThinkingMessage() {
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message ai-message';
+    messageElement.id = 'ai-thinking-message';
+
+    const contentElement = document.createElement('div');
+    contentElement.className = 'message-content markdown-body is-streaming';
+    contentElement.innerHTML = `
+        <div class="loading-dots">
+            <span>&#9679;</span>
+            <span>&#9679;</span>
+            <span>&#9679;</span>
+        </div>
+    `;
+
+    const metaElement = document.createElement('div');
+    metaElement.className = 'message-meta';
+
+    messageElement.appendChild(contentElement);
+    messageElement.appendChild(metaElement);
+    elements.chatMessages.appendChild(messageElement);
+    scrollToBottom();
+
+    return {
+        messageElement,
+        contentElement,
+        metaElement
+    };
+}
+
+function updateAiThinkingMessage(streamingMessage, content, finished = false) {
+    if (!streamingMessage || !streamingMessage.contentElement) {
+        return;
+    }
+
+    renderMessageContent(streamingMessage.contentElement, content || '', {
+        sender: 'ai',
+        streaming: !finished
+    });
+
+    if (finished && streamingMessage.metaElement) {
+        streamingMessage.metaElement.textContent = getCurrentTimeString();
+        streamingMessage.messageElement.removeAttribute('id');
+    }
+
+    scrollToBottom();
+}
+
+function addRelatedDocuments(documents) {
+    return documents;
+}
+
+function renderMessageContent(contentElement, content, options = {}) {
+    if (!contentElement) {
+        return;
+    }
+
+    const {
+        sender = 'ai',
+        streaming = false
+    } = options;
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+    const enableMarkdown = sender === 'ai';
+
+    contentElement.classList.toggle('markdown-body', enableMarkdown);
+    contentElement.classList.toggle('is-streaming', enableMarkdown && streaming);
+
+    if (streaming && !safeContent.trim()) {
+        contentElement.innerHTML = `
+            <div class="loading-dots">
+                <span>&#9679;</span>
+                <span>&#9679;</span>
+                <span>&#9679;</span>
+            </div>
+        `;
+        return;
+    }
+
+    contentElement.innerHTML = formatMessageContent(safeContent, { enableMarkdown });
+
+    if (enableMarkdown && !streaming) {
+        applySyntaxHighlighting(contentElement);
+    }
+}
+
+function configureMarked() {
+    if (hasConfiguredMarked || typeof marked === 'undefined') {
+        return;
+    }
+
+    marked.setOptions({
+        breaks: true,
+        gfm: true,
+        smartLists: true,
+        smartypants: true
+    });
+
+    hasConfiguredMarked = true;
+}
+
+function enhanceMarkdownHtml(rawHtml) {
+    const container = document.createElement('div');
+    container.innerHTML = rawHtml;
+
+    container.querySelectorAll('script, iframe, object, embed, form').forEach(element => {
+        element.remove();
+    });
+
+    container.querySelectorAll('*').forEach(element => {
+        [...element.attributes].forEach(attribute => {
+            if (/^on/i.test(attribute.name)) {
+                element.removeAttribute(attribute.name);
+            }
+        });
+    });
+
+    container.querySelectorAll('a').forEach(link => {
+        const href = link.getAttribute('href') || '';
+        if (/^\s*javascript:/i.test(href)) {
+            link.removeAttribute('href');
+            return;
+        }
+
+        if (href && !href.startsWith('#')) {
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+        }
+    });
+
+    container.querySelectorAll('img').forEach(image => {
+        image.setAttribute('loading', 'lazy');
+        image.setAttribute('decoding', 'async');
+        image.setAttribute('referrerpolicy', 'no-referrer');
+        image.setAttribute('alt', image.getAttribute('alt') || 'markdown image');
+    });
+
+    container.querySelectorAll('table').forEach(table => {
+        if (table.parentElement?.classList.contains('table-wrapper')) {
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrapper';
+        table.parentNode.insertBefore(wrapper, table);
+        wrapper.appendChild(table);
+    });
+
+    container.querySelectorAll('p').forEach(paragraph => {
+        if (!paragraph.textContent.trim() && paragraph.children.length === 0) {
+            paragraph.remove();
+        }
+    });
+
+    return container.innerHTML;
+}
+
+function applySyntaxHighlighting(container) {
+    if (!container || typeof hljs === 'undefined') {
+        return;
+    }
+
+    container.querySelectorAll('pre code').forEach(codeElement => {
+        hljs.highlightElement(codeElement);
+    });
+}
+
+function formatMessageContent(content, options = {}) {
+    const { enableMarkdown = true } = options;
+    const safeContent = typeof content === 'string' ? content : String(content ?? '');
+
+    if (!enableMarkdown) {
+        return escapeHtml(safeContent).replace(/\n/g, '<br>');
+    }
+
+    if (typeof marked !== 'undefined') {
+        try {
+            configureMarked();
+            return enhanceMarkdownHtml(marked.parse(safeContent));
+        } catch (error) {
+            console.warn('Markdown render failed, falling back to plain text:', error);
+        }
+    }
+
+    return escapeHtml(safeContent).replace(/\n/g, '<br>');
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+
+    return String(text ?? '').replace(/[&<>"']/g, function(match) {
+        return map[match];
+    });
+}
+
 function getCurrentTimeString() {
     const now = new Date();
     return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;

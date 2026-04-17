@@ -809,7 +809,7 @@ async function startRenameGroup(groupId) {
 
 async function deleteGroup(groupId, name) {
     const result = await DialogUtils.dangerConfirm(
-        `确定要删除分组<strong>"${name}"</strong>吗？<br><br><span style="color: #dc3545;">删除后该分组下的子分组和笔记将移至上级分组。</span>`,
+        `确定要删除分组<strong>"${name}"</strong>吗？<br><br><span style="color: #dc3545;">删除后该分组下的所有子分组和文档都会一并删除，且不可恢复。</span>`,
         '删除分组'
     );
 
@@ -818,24 +818,26 @@ async function deleteGroup(groupId, name) {
     try {
         const group = noteGroups.find(item => item.id === groupId);
         const parentId = group ? group.parentId : null;
+        const removedGroupIds = collectDescendantGroupIds(groupId);
+        const removedNoteIds = new Set(
+            notes.filter(note => removedGroupIds.has(note.groupId)).map(note => note.id)
+        );
         await groupAPI.delete(groupId);
 
-        noteGroups = noteGroups.filter(item => item.id !== groupId).map(item => {
-            if (item.parentId === groupId) {
-                return { ...item, parentId };
-            }
-            return item;
-        });
+        noteGroups = noteGroups.filter(item => !removedGroupIds.has(item.id));
+        notes = notes.filter(note => !removedGroupIds.has(note.groupId));
 
-        notes = notes.map(note => {
-            if (note.groupId === groupId) {
-                return { ...note, groupId: parentId };
-            }
-            return note;
-        });
-
-        if (selectedGroupId === groupId) {
+        if (selectedGroupId != null && removedGroupIds.has(selectedGroupId)) {
             selectedGroupId = parentId;
+        }
+
+        if (currentNote && removedNoteIds.has(currentNote.id)) {
+            currentNote = null;
+            if (vditor) {
+                vditor.setValue('');
+            }
+            elements.editorSection.style.display = 'none';
+            elements.emptyState.style.display = 'flex';
         }
 
         renderNotesTree();
@@ -844,6 +846,27 @@ async function deleteGroup(groupId, name) {
         console.error('删除分组失败:', error);
         await DialogUtils.error('删除失败: ' + error.message);
     }
+}
+
+function collectDescendantGroupIds(groupId) {
+    const groupIds = new Set();
+    const stack = [groupId];
+
+    while (stack.length > 0) {
+        const currentId = stack.pop();
+        if (groupIds.has(currentId)) {
+            continue;
+        }
+
+        groupIds.add(currentId);
+        noteGroups.forEach(group => {
+            if (group.parentId === currentId) {
+                stack.push(group.id);
+            }
+        });
+    }
+
+    return groupIds;
 }
 
 async function moveNoteToGroup(noteId, groupId) {

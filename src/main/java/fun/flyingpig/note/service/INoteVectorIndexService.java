@@ -4,25 +4,20 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import fun.flyingpig.note.entity.NoteVectorIndex;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Map;
 
 /**
- * 笔记向量索引服务接口
+ * 绗旇鍚戦噺绱㈠紩鏈嶅姟鎺ュ彛
  */
 public interface INoteVectorIndexService extends IService<NoteVectorIndex> {
 
     /**
-     * 根据知识库ID列表查询所有向量索引
+     * 按知识库查询每篇笔记最近一次索引更新时间。
      */
-    List<NoteVectorIndex> selectByKnowledgeBaseIds(List<Long> knowledgeBaseIds);
+    Map<Long, LocalDateTime> getLatestUpdateTimeMapByKnowledgeBaseId(Long knowledgeBaseId);
 
     /**
-     * 根据笔记ID获取最新的索引更新时间
-     */
-    LocalDateTime getLatestUpdateTimeByNoteId(Long noteId);
-
-    /**
-     * 根据知识库ID删除所有向量索引
+     * 鏍规嵁鐭ヨ瘑搴揑D鍒犻櫎鎵€鏈夊悜閲忕储寮?
      */
     void deleteByKnowledgeBaseId(Long knowledgeBaseId);
 }

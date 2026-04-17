@@ -9,7 +9,7 @@ import fun.flyingpig.note.mapper.NoteMapper;
 import fun.flyingpig.note.mapper.NoteGroupMapper;
 import fun.flyingpig.note.service.INoteVectorIndexService;
 import fun.flyingpig.note.service.KnowledgeBaseService;
-import fun.flyingpig.note.service.QdrantService;
+import fun.flyingpig.note.service.qdrant.QdrantService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
