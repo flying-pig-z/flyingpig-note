@@ -1,6 +1,7 @@
 package fun.flyingpig.note.controller;
 
 import fun.flyingpig.note.dto.NoteDTO;
+import fun.flyingpig.note.dto.NoteGroupAssignmentDTO;
 import fun.flyingpig.note.dto.Result;
 import fun.flyingpig.note.entity.Note;
 import fun.flyingpig.note.service.NoteService;
@@ -64,6 +65,19 @@ public class NoteController {
     @PutMapping("/{id}")
     public Result<Note> updateNote(@PathVariable Long id, @Valid @RequestBody NoteDTO dto) {
         Note note = noteService.updateNote(id, dto);
+        if (note == null) {
+            return Result.error("笔记不存在");
+        }
+
+        return Result.success("更新成功", note);
+    }
+
+    /**
+     * 更新笔记分组
+     */
+    @PutMapping("/{id}/group")
+    public Result<Note> updateNoteGroup(@PathVariable Long id, @RequestBody NoteGroupAssignmentDTO dto) {
+        Note note = noteService.updateNoteGroup(id, dto.getGroupId());
         if (note == null) {
             return Result.error("笔记不存在");
         }

@@ -1,4 +1,4 @@
-// 自定义提示框工具类
+﻿// 自定义提示框工具类
 class DialogUtils {
     static success(message, title = '成功') {
         return Swal.fire({
@@ -257,20 +257,47 @@ const noteAPI = {
         const result = await apiClient.get('/notes/search', { knowledgeBaseId, keyword });
         return result.data;
     },
-    async create(title, content, knowledgeBaseId) {
-        const result = await apiClient.post('/notes', { title, content, knowledgeBaseId });
+    async create(title, content, knowledgeBaseId, groupId = null) {
+        const result = await apiClient.post('/notes', { title, content, knowledgeBaseId, groupId });
         return result.data;
     },
     async getById(id) {
         const result = await apiClient.get(`/notes/${id}`);
         return result.data;
     },
-    async update(id, title, content, knowledgeBaseId) {
-        const result = await apiClient.put(`/notes/${id}`, { title, content, knowledgeBaseId });
+    async update(id, title, content, knowledgeBaseId, groupId = null) {
+        const result = await apiClient.put(`/notes/${id}`, { title, content, knowledgeBaseId, groupId });
+        return result.data;
+    },
+    async updateGroup(id, groupId) {
+        const result = await apiClient.put(`/notes/${id}/group`, { groupId });
         return result.data;
     },
     async delete(id) {
         await apiClient.delete(`/notes/${id}`);
+    }
+};
+
+// 分组API
+const groupAPI = {
+    async getList(knowledgeBaseId) {
+        const result = await apiClient.get('/note-groups', { knowledgeBaseId });
+        return result.data;
+    },
+    async create(name, knowledgeBaseId, parentId = null) {
+        const result = await apiClient.post('/note-groups', { name, knowledgeBaseId, parentId });
+        return result.data;
+    },
+    async update(id, name, knowledgeBaseId, parentId = null) {
+        const result = await apiClient.put(`/note-groups/${id}`, { name, knowledgeBaseId, parentId });
+        return result.data;
+    },
+    async move(id, parentId = null) {
+        const result = await apiClient.put(`/note-groups/${id}/move`, { parentId });
+        return result.data;
+    },
+    async delete(id) {
+        await apiClient.delete(`/note-groups/${id}`);
     }
 };
 
@@ -302,6 +329,10 @@ async function checkParams() {
 // 当前状态
 let notes = [];
 let currentNote = null;
+let noteGroups = [];
+let selectedGroupId = null;
+let expandedGroups = new Set();
+let isSearchMode = false;
 let saveTimeout = null;
 let vditor = null;
 let originalContent = '';
@@ -311,7 +342,7 @@ const elements = {
     sidebar: document.getElementById('sidebar'),
     notesTree: document.getElementById('notesTree'),
     noteSearch: document.getElementById('noteSearch'),
-    addNoteBtn: document.getElementById('addNoteBtn'),
+    addItemBtn: document.getElementById('addItemBtn'),
     backToKb: document.getElementById('backToKb'),
     vditorContainer: document.getElementById('vditorContainer'),
     editorSection: document.getElementById('editorSection'),
@@ -406,7 +437,7 @@ async function initPage() {
         elements.currentKbTitle.textContent = decodeURIComponent(kbTitle);
         await loadNotes();
     } catch (error) {
-        console.error('页面初始化失败:', error);
+        console.error('页面初始化失败', error);
         if (error.message.includes('认证失败')) return;
         await DialogUtils.error('页面加载失败: ' + error.message);
     }
@@ -415,11 +446,20 @@ async function initPage() {
 async function loadNotes() {
     try {
         showLoading(true);
-        notes = await noteAPI.getList(kbId);
+        isSearchMode = false;
+        const [noteList, groupList] = await Promise.all([
+            noteAPI.getList(kbId),
+            groupAPI.getList(kbId)
+        ]);
+        notes = noteList;
+        noteGroups = groupList;
+        if (expandedGroups.size === 0) {
+            expandedGroups = new Set(noteGroups.map(group => group.id));
+        }
         renderNotesTree();
     } catch (error) {
-        console.error('加载笔记失败:', error);
-        await DialogUtils.error('加载笔记失败: ' + error.message);
+        console.error("加载笔记失败:", error);
+        await DialogUtils.error("加载笔记失败: " + error.message);
     } finally {
         showLoading(false);
     }
@@ -438,16 +478,28 @@ function showLoading(show) {
 
 // 渲染笔记列表
 function renderNotesTree(searchTerm = '') {
-    let filteredNotes = notes;
+    if (isSearchMode) {
+        const filteredNotes = notes;
+        if (filteredNotes.length === 0) {
+            elements.notesTree.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #666;">
+                    <i class="fas fa-search" style="font-size: 24px; margin-bottom: 10px;"></i>
+                    <p>未找到匹配的笔记</p>
+                </div>
+            `;
+            return;
+        }
 
-    if (searchTerm) {
-        filteredNotes = notes.filter(note =>
-            note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (note.content && note.content.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
+        elements.notesTree.innerHTML = `
+            <div class="search-result-header">搜索结果</div>
+            ${filteredNotes.map(note => renderNoteNode(note, 0)).join('')}
+        `;
+        return;
     }
 
-    if (filteredNotes.length === 0) {
+    const { rootGroups, rootNotes } = buildGroupTree();
+
+    if (rootGroups.length === 0 && rootNotes.length === 0) {
         elements.notesTree.innerHTML = `
             <div style="text-align: center; padding: 20px; color: #666;">
                 <i class="fas fa-file-alt" style="font-size: 24px; margin-bottom: 10px;"></i>
@@ -458,26 +510,385 @@ function renderNotesTree(searchTerm = '') {
         return;
     }
 
-    elements.notesTree.innerHTML = filteredNotes.map(note => {
-        const isActive = currentNote && currentNote.id === note.id;
-        return `
-            <div class="note-item ${isActive ? 'active' : ''}" data-note-id="${note.id}" onclick="selectNote(${note.id})">
-                <i class="note-icon fas fa-file-alt"></i>
-                <span class="note-title" ondblclick="event.stopPropagation(); startRenameNote(${note.id})">${note.title}</span>
-                <div class="note-actions">
-                    <button class="rename-btn" onclick="event.stopPropagation(); startRenameNote(${note.id})" title="重命名">
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button class="delete-btn" onclick="event.stopPropagation(); deleteNote(${note.id}, '${note.title}')" title="删除笔记">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
+    elements.notesTree.innerHTML = `
+        <div class="root-drop-zone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDropOnRoot(event)">
+            <i class="fas fa-layer-group"></i>
+            <span>未分组</span>
+        </div>
+        <div class="root-children">
+            ${rootGroups.map(group => renderGroupNode(group, 0)).join('')}
+            ${rootNotes.map(note => renderNoteNode(note, 0)).join('')}
+        </div>
+    `;
 }
 
-// 开始重命名笔记
+function buildGroupTree() {
+    const groupMap = new Map();
+    noteGroups.forEach(group => {
+        groupMap.set(group.id, {
+            ...group,
+            groups: [],
+            notes: []
+        });
+    });
+
+    const rootGroups = [];
+    noteGroups.forEach(group => {
+        const node = groupMap.get(group.id);
+        if (group.parentId && groupMap.has(group.parentId)) {
+            groupMap.get(group.parentId).groups.push(node);
+        } else {
+            rootGroups.push(node);
+        }
+    });
+
+    const rootNotes = [];
+    notes.forEach(note => {
+        if (note.groupId && groupMap.has(note.groupId)) {
+            groupMap.get(note.groupId).notes.push(note);
+        } else {
+            rootNotes.push(note);
+        }
+    });
+
+    return { rootGroups, rootNotes };
+}
+
+function renderGroupNode(group, level) {
+    const isOpen = expandedGroups.has(group.id);
+    const isActive = selectedGroupId === group.id;
+    const toggleIcon = isOpen ? 'fa-chevron-down' : 'fa-chevron-right';
+    const folderIcon = isOpen ? 'fa-folder-open' : 'fa-folder';
+    const paddingLeft = 12 + level * 16;
+
+    return `
+        <div class="group-item" data-group-id="${group.id}">
+            <div class="group-header ${isOpen ? 'open' : ''} ${isActive ? 'active' : ''}"
+                style="padding-left: ${paddingLeft}px;"
+                draggable="true"
+                ondragstart="startDrag(event, 'group', ${group.id})"
+                ondragover="handleDragOver(event)"
+                ondragleave="handleDragLeave(event)"
+                ondrop="handleDropOnGroup(event, ${group.id})"
+                onclick="toggleGroup(${group.id})">
+                <i class="fas ${toggleIcon} group-toggle"></i>
+                <i class="fas ${folderIcon} group-icon"></i>
+                <span class="group-title" ondblclick="event.stopPropagation(); startRenameGroup(${group.id})">${group.name}</span>
+                <div class="item-actions">
+                    <div class="menu-trigger">
+                        <button class="icon-btn" onclick="event.stopPropagation(); toggleActionMenu('group', ${group.id}, 'more')" title="更多">
+                            <i class="fas fa-ellipsis-h"></i>
+                        </button>
+                        <div id="group-${group.id}-more-menu" class="action-menu menu-left" onclick="event.stopPropagation();">
+                            <button onclick="event.stopPropagation(); startRenameGroup(${group.id}); closeAllMenus();">重命名</button>
+                            <button class="danger" onclick="event.stopPropagation(); deleteGroup(${group.id}, '${group.name}'); closeAllMenus();">删除</button>
+                        </div>
+                    </div>
+                    <div class="menu-trigger">
+                        <button class="icon-btn add" onclick="event.stopPropagation(); toggleActionMenu('group', ${group.id}, 'add')" title="添加">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <div id="group-${group.id}-add-menu" class="action-menu menu-right" onclick="event.stopPropagation();">
+                            <button onclick="event.stopPropagation(); createSubGroup(${group.id}); closeAllMenus();">分组</button>
+                            <button onclick="event.stopPropagation(); createNoteInGroup(${group.id}); closeAllMenus();">文档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="group-children" style="display: ${isOpen ? 'block' : 'none'};">
+                ${group.groups.map(child => renderGroupNode(child, level + 1)).join('')}
+                ${group.notes.map(note => renderNoteNode(note, level + 1)).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderNoteNode(note, level) {
+    const isActive = currentNote && currentNote.id === note.id;
+    const paddingLeft = 12 + level * 16;
+    const parentGroupId = note.groupId != null ? note.groupId : 'null';
+
+    return `
+        <div class="note-item ${isActive ? 'active' : ''}"
+            data-note-id="${note.id}"
+            draggable="true"
+            style="padding-left: ${paddingLeft}px;"
+            ondragstart="startDrag(event, 'note', ${note.id})"
+            onclick="selectNote(${note.id})">
+            <i class="note-icon fas fa-file-alt"></i>
+            <span class="note-title" ondblclick="event.stopPropagation(); startRenameNote(${note.id})">${note.title}</span>
+            <div class="item-actions">
+                <div class="menu-trigger">
+                    <button class="icon-btn" onclick="event.stopPropagation(); toggleActionMenu('note', ${note.id}, 'more')" title="更多">
+                        <i class="fas fa-ellipsis-h"></i>
+                    </button>
+                    <div id="note-${note.id}-more-menu" class="action-menu menu-left" onclick="event.stopPropagation();">
+                        <button onclick="event.stopPropagation(); startRenameNote(${note.id}); closeAllMenus();">重命名</button>
+                        <button class="danger" onclick="event.stopPropagation(); deleteNote(${note.id}, '${note.title}'); closeAllMenus();">删除</button>
+                    </div>
+                </div>
+                <div class="menu-trigger">
+                    <button class="icon-btn add" onclick="event.stopPropagation(); toggleActionMenu('note', ${note.id}, 'add')" title="添加">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <div id="note-${note.id}-add-menu" class="action-menu menu-right" onclick="event.stopPropagation();">
+                        <button onclick="event.stopPropagation(); createGroup(${parentGroupId}); closeAllMenus();">分组</button>
+                        <button onclick="event.stopPropagation(); createNoteWithGroup(${parentGroupId}); closeAllMenus();">文档</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function toggleActionMenu(type, id, menuType) {
+    const menuSuffix = menuType ? `-${menuType}` : '';
+    const menu = document.getElementById(`${type}-${id}${menuSuffix}-menu`);
+    if (!menu) return;
+    const isOpen = menu.classList.contains('open');
+    closeAllMenus();
+    if (!isOpen) {
+        menu.classList.add('open');
+    }
+}
+
+function closeAllMenus() {
+    document.querySelectorAll('.action-menu.open').forEach(menu => {
+        menu.classList.remove('open');
+    });
+}
+
+function toggleGroup(groupId) {
+    if (expandedGroups.has(groupId)) {
+        expandedGroups.delete(groupId);
+    } else {
+        expandedGroups.add(groupId);
+    }
+    selectedGroupId = groupId;
+    renderNotesTree();
+}
+
+function ensureGroupVisible(groupId) {
+    if (!groupId) return;
+    const groupMap = new Map(noteGroups.map(group => [group.id, group]));
+    let currentId = groupId;
+    while (currentId) {
+        expandedGroups.add(currentId);
+        const currentGroup = groupMap.get(currentId);
+        currentId = currentGroup ? currentGroup.parentId : null;
+    }
+}
+
+function startDrag(event, type, id) {
+    event.dataTransfer.setData('application/json', JSON.stringify({ type, id }));
+    event.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.classList.add('drag-over');
+}
+
+function handleDragLeave(event) {
+    event.currentTarget.classList.remove('drag-over');
+}
+
+function handleDropOnGroup(event, groupId) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over');
+
+    const payload = parseDragData(event);
+    if (!payload) return;
+
+    if (payload.type === 'note') {
+        moveNoteToGroup(payload.id, groupId);
+    } else if (payload.type === 'group') {
+        moveGroupToGroup(payload.id, groupId);
+    }
+}
+
+function handleDropOnRoot(event) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over');
+
+    const payload = parseDragData(event);
+    if (!payload) return;
+
+    if (payload.type === 'note') {
+        moveNoteToGroup(payload.id, null);
+    } else if (payload.type === 'group') {
+        moveGroupToGroup(payload.id, null);
+    }
+}
+
+function parseDragData(event) {
+    const raw = event.dataTransfer.getData('application/json');
+    if (!raw) return null;
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        console.error('拖拽数据解析失败:', error);
+        return null;
+    }
+}
+
+async function createGroup(parentId = null) {
+    const name = await DialogUtils.prompt('请输入分组名称', '新建分组', '', '例如：资料整理');
+    if (!name) return;
+
+    try {
+        const group = await groupAPI.create(name.trim(), kbId, parentId);
+        noteGroups.push(group);
+        expandedGroups.add(group.id);
+        if (parentId) {
+            expandedGroups.add(parentId);
+        }
+        renderNotesTree();
+        await DialogUtils.success('分组创建成功', '创建成功');
+    } catch (error) {
+        console.error('创建分组失败:', error);
+        await DialogUtils.error('创建分组失败: ' + error.message);
+    }
+}
+
+function createSubGroup(parentId) {
+    createGroup(parentId);
+}
+
+async function createNoteInGroup(groupId) {
+    selectedGroupId = groupId;
+    await createNoteWithGroup(groupId);
+}
+
+async function createNoteWithGroup(groupId) {
+    const title = await DialogUtils.prompt('请输入笔记标题', '新建笔记', '', '例如：学习笔记');
+    if (!title) return;
+
+    try {
+        const newNote = await noteAPI.create(
+            title.trim(),
+            `# ${title.trim()}\n\n开始编写您的笔记内容...`,
+            kbId,
+            groupId
+        );
+
+        notes.unshift(newNote);
+        if (groupId) {
+            ensureGroupVisible(groupId);
+        }
+        renderNotesTree();
+        await selectNote(newNote.id);
+        await DialogUtils.success('笔记创建成功', '创建成功');
+    } catch (error) {
+        console.error('创建笔记失败:', error);
+        await DialogUtils.error('创建失败: ' + error.message, '创建失败');
+    }
+}
+
+async function startRenameGroup(groupId) {
+    const group = noteGroups.find(item => item.id === groupId);
+    if (!group) return;
+
+    const newName = await DialogUtils.prompt('请输入新的分组名称', '重命名分组', group.name, '例如：资料整理');
+    if (!newName || newName.trim() === group.name) return;
+
+    try {
+        const updated = await groupAPI.update(groupId, newName.trim(), kbId, group.parentId);
+        const index = noteGroups.findIndex(item => item.id === groupId);
+        if (index !== -1) {
+            noteGroups[index] = updated;
+        }
+        renderNotesTree();
+        await DialogUtils.success('分组重命名成功', '更新成功');
+    } catch (error) {
+        console.error('重命名分组失败:', error);
+        await DialogUtils.error('重命名失败: ' + error.message);
+    }
+}
+
+async function deleteGroup(groupId, name) {
+    const result = await DialogUtils.dangerConfirm(
+        `确定要删除分组<strong>"${name}"</strong>吗？<br><br><span style="color: #dc3545;">删除后该分组下的子分组和笔记将移至上级分组。</span>`,
+        '删除分组'
+    );
+
+    if (!result.isConfirmed) return;
+
+    try {
+        const group = noteGroups.find(item => item.id === groupId);
+        const parentId = group ? group.parentId : null;
+        await groupAPI.delete(groupId);
+
+        noteGroups = noteGroups.filter(item => item.id !== groupId).map(item => {
+            if (item.parentId === groupId) {
+                return { ...item, parentId };
+            }
+            return item;
+        });
+
+        notes = notes.map(note => {
+            if (note.groupId === groupId) {
+                return { ...note, groupId: parentId };
+            }
+            return note;
+        });
+
+        if (selectedGroupId === groupId) {
+            selectedGroupId = parentId;
+        }
+
+        renderNotesTree();
+        await DialogUtils.success('分组删除成功', '删除成功');
+    } catch (error) {
+        console.error('删除分组失败:', error);
+        await DialogUtils.error('删除失败: ' + error.message);
+    }
+}
+
+async function moveNoteToGroup(noteId, groupId) {
+    const note = notes.find(item => item.id === noteId);
+    if (!note || note.groupId === groupId) return;
+
+    try {
+        const updated = await noteAPI.updateGroup(noteId, groupId);
+        const index = notes.findIndex(item => item.id === noteId);
+        if (index !== -1) {
+            notes[index] = { ...notes[index], groupId: updated.groupId };
+        }
+        if (currentNote && currentNote.id === noteId) {
+            currentNote.groupId = updated.groupId;
+        }
+        if (groupId) {
+            ensureGroupVisible(groupId);
+        }
+        renderNotesTree();
+    } catch (error) {
+        console.error('移动笔记失败:', error);
+        await DialogUtils.error('移动失败: ' + error.message);
+    }
+}
+
+async function moveGroupToGroup(groupId, parentId) {
+    const group = noteGroups.find(item => item.id === groupId);
+    if (!group || group.parentId === parentId) return;
+
+    try {
+        const updated = await groupAPI.move(groupId, parentId);
+        const index = noteGroups.findIndex(item => item.id === groupId);
+        if (index !== -1) {
+            noteGroups[index] = { ...noteGroups[index], parentId: updated.parentId };
+        }
+        if (parentId) {
+            ensureGroupVisible(parentId);
+        }
+        renderNotesTree();
+    } catch (error) {
+        console.error('移动分组失败:', error);
+        await DialogUtils.error('移动失败: ' + error.message);
+    }
+}
+
 function startRenameNote(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
@@ -505,7 +916,7 @@ function startRenameNote(noteId) {
 
                 // 需要先获取笔记完整内容，然后更新标题
                 const fullNote = await noteAPI.getById(noteId);
-                const updatedNote = await noteAPI.update(note.id, newTitle, fullNote.content, kbId);
+                const updatedNote = await noteAPI.update(note.id, newTitle, fullNote.content, kbId, fullNote.groupId);
 
                 const index = notes.findIndex(n => n.id === note.id);
                 if (index !== -1) {
@@ -548,6 +959,8 @@ async function selectNote(noteId) {
         const fullNote = await noteAPI.getById(noteId);
 
         currentNote = fullNote;
+        selectedGroupId = fullNote.groupId || null;
+        ensureGroupVisible(selectedGroupId);
 
         if (!vditor) {
             initVditor(fullNote.content || '');
@@ -577,7 +990,7 @@ async function saveCurrentNote() {
     const content = getEditorContent();
 
     try {
-        const updatedNote = await noteAPI.update(currentNote.id, currentNote.title, content, kbId);
+        const updatedNote = await noteAPI.update(currentNote.id, currentNote.title, content, kbId, currentNote.groupId);
         const index = notes.findIndex(n => n.id === currentNote.id);
         if (index !== -1) {
             notes[index] = updatedNote;
@@ -663,8 +1076,8 @@ elements.collapseBtn.addEventListener('click', () => {
 
 // 拖拽调节侧边栏宽度
 (function initResizer() {
-    const minWidth = 200;
-    const maxWidth = 500;
+    const minWidth = 220;
+    const maxWidth = 520;
     let isResizing = false;
 
     elements.resizer.addEventListener('mousedown', (e) => {
@@ -677,7 +1090,8 @@ elements.collapseBtn.addEventListener('click', () => {
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
 
-        let newWidth = e.clientX;
+        const containerRect = document.querySelector('.notes-container').getBoundingClientRect();
+        let newWidth = e.clientX - containerRect.left;
         if (newWidth < minWidth) newWidth = minWidth;
         if (newWidth > maxWidth) newWidth = maxWidth;
 
@@ -699,10 +1113,12 @@ elements.noteSearch.addEventListener('input', async (e) => {
 
     try {
         if (keyword) {
+            isSearchMode = true;
             // 搜索API会返回匹配的笔记（仅ID和标题）
             const searchResults = await noteAPI.search(kbId, keyword);
             notes = searchResults;
         } else {
+            isSearchMode = false;
             await loadNotes();
         }
         renderNotesTree(keyword);
@@ -713,34 +1129,11 @@ elements.noteSearch.addEventListener('input', async (e) => {
 });
 
 // 新建笔记
-elements.addNoteBtn.addEventListener('click', async () => {
-    const title = await DialogUtils.prompt('请输入笔记标题', '新建笔记', '', '例如：学习笔记');
-    if (!title) return;
-
-    try {
-        elements.addNoteBtn.disabled = true;
-        elements.addNoteBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 创建中...';
-
-        const newNote = await noteAPI.create(
-            title.trim(),
-            `# ${title.trim()}\n\n开始编写您的笔记内容...`,
-            kbId
-        );
-
-        notes.unshift(newNote);
-        renderNotesTree();
-        await selectNote(newNote.id);
-
-        await DialogUtils.success('笔记创建成功！', '创建成功');
-
-    } catch (error) {
-        console.error('创建笔记失败:', error);
-        await DialogUtils.error('创建失败: ' + error.message, '创建失败');
-    } finally {
-        elements.addNoteBtn.disabled = false;
-        elements.addNoteBtn.innerHTML = '<i class="fas fa-plus"></i> 新建笔记';
-    }
+elements.addItemBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleActionMenu('add', 'item', '');
 });
+
 
 // 返回知识库列表
 elements.backToKb.addEventListener('click', async () => {
@@ -780,4 +1173,8 @@ window.addEventListener('beforeunload', async (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     initPage();
     setupAutoSave();
+});
+
+document.addEventListener('click', () => {
+    closeAllMenus();
 });

@@ -33,6 +33,8 @@ public interface NoteService extends IService<Note> {
      */
     Note updateNote(Long id, NoteDTO dto);
 
+    Note updateNoteGroup(Long id, Long groupId);
+
     /**
      * 删除笔记
      */

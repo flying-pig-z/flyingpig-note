@@ -6,6 +6,7 @@ import fun.flyingpig.note.dto.KnowledgeBaseDTO;
 import fun.flyingpig.note.entity.KnowledgeBase;
 import fun.flyingpig.note.mapper.KnowledgeBaseMapper;
 import fun.flyingpig.note.mapper.NoteMapper;
+import fun.flyingpig.note.mapper.NoteGroupMapper;
 import fun.flyingpig.note.service.INoteVectorIndexService;
 import fun.flyingpig.note.service.KnowledgeBaseService;
 import fun.flyingpig.note.service.QdrantService;
@@ -23,6 +24,9 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Autowired
     private NoteMapper noteMapper;
     
+
+    @Autowired
+    private NoteGroupMapper noteGroupMapper;
     @Autowired
     private INoteVectorIndexService noteVectorIndexService;
 
@@ -75,6 +79,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         // 删除该知识库下的所有笔记
         noteMapper.deleteByKnowledgeBaseId(kbId);
         // 删除知识库本身
+        noteGroupMapper.deleteByKnowledgeBaseId(kbId);
         this.removeById(kbId);
     }
 

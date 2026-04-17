@@ -2,14 +2,18 @@ package fun.flyingpig.note.service.impl;
 
 import fun.flyingpig.note.dto.BatchImportResult;
 import fun.flyingpig.note.dto.ImportDetail;
+import fun.flyingpig.note.dto.NoteGroupDTO;
 import fun.flyingpig.note.entity.KnowledgeBase;
 import fun.flyingpig.note.entity.Note;
+import fun.flyingpig.note.entity.NoteGroup;
 import fun.flyingpig.note.service.BatchImportService;
 import fun.flyingpig.note.service.KnowledgeBaseService;
+import fun.flyingpig.note.service.NoteGroupService;
 import fun.flyingpig.note.service.NoteService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -30,14 +34,16 @@ public class BatchImportServiceImpl implements BatchImportService {
     @Autowired
     private NoteService noteService;
 
+    @Autowired
+    private NoteGroupService noteGroupService;
+
     @Override
+    @Transactional
     public BatchImportResult importFolder(MultipartFile[] files, Long knowledgeBaseId, Long userId) {
-        // 验证知识库是否存在且属于当前用户
         KnowledgeBase knowledgeBase = knowledgeBaseService.getById(knowledgeBaseId);
         if (knowledgeBase == null) {
             throw new IllegalArgumentException("知识库不存在");
         }
-
         if (!knowledgeBase.getUserId().equals(userId)) {
             throw new SecurityException("无权限操作");
         }
@@ -45,127 +51,208 @@ public class BatchImportServiceImpl implements BatchImportService {
         BatchImportResult result = new BatchImportResult();
         List<ImportDetail> details = new ArrayList<>();
 
-        List<Note> notesToInsert = new ArrayList<>();
-        Map<String, ImportDetail> fileNameToDetailMap = new HashMap<>();
+        if (files == null || files.length == 0) {
+            result.setImportedCount(0);
+            result.setFailedCount(0);
+            result.setDetails(details);
+            return result;
+        }
 
-        // 首先处理所有文件，准备要插入的笔记数据
+        int strippedRootDepth = determineSharedRootDepth(files);
+        Map<String, Long> groupCache = buildGroupCache(knowledgeBaseId);
+        List<Note> notesToInsert = new ArrayList<>();
+        List<ImportDetail> pendingDetails = new ArrayList<>();
+
         for (MultipartFile file : files) {
+            String normalizedPath = normalizePath(file.getOriginalFilename());
             ImportDetail detail = new ImportDetail();
-            detail.setFileName(file.getOriginalFilename());
+            detail.setFileName(normalizedPath);
+            details.add(detail);
 
             try {
-                // 只处理Markdown文件
-                if (isMarkdownFile(file.getOriginalFilename())) {
-                    // 读取文件内容
-                    String content = readFileContent(file);
-
-                    // 提取标题（使用文件名作为标题，去掉.md后缀）
-                    String title = extractTitleFromFileName(file.getOriginalFilename());
-
-                    // 创建笔记对象
-                    Note note = Note.builder()
-                            .title(title)
-                            .content(content)
-                            .knowledgeBaseId(knowledgeBaseId)
-                            .build();
-
-                    notesToInsert.add(note);
-                    detail.setStatus("PENDING"); // 标记为待插入
-                    detail.setMessage("准备插入");
-
-                } else {
+                if (!isMarkdownFile(normalizedPath)) {
                     detail.setStatus("SKIPPED");
-                    detail.setMessage("非Markdown文件，已跳过");
+                    detail.setMessage("非 Markdown 文件，已跳过");
+                    continue;
                 }
-            } catch (Exception e) {
+
+                String content = readFileContent(file);
+                Long groupId = resolveGroupId(knowledgeBaseId, normalizedPath, strippedRootDepth, groupCache);
+                String importTarget = buildImportTarget(normalizedPath, strippedRootDepth);
+
+                Note note = Note.builder()
+                        .title(extractTitleFromFileName(normalizedPath))
+                        .content(content)
+                        .knowledgeBaseId(knowledgeBaseId)
+                        .groupId(groupId)
+                        .build();
+
+                notesToInsert.add(note);
+                pendingDetails.add(detail);
+                detail.setStatus("PENDING");
+                detail.setMessage(importTarget == null ? "准备导入到根目录" : "准备导入到 " + importTarget);
+            } catch (Exception exception) {
                 detail.setStatus("FAILED");
-                detail.setMessage("读取文件失败: " + e.getMessage());
-                log.error("读取文件失败: {}", file.getOriginalFilename(), e);
-            }
-
-            fileNameToDetailMap.put(file.getOriginalFilename(), detail);
-            details.add(detail);
-        }
-
-        // 批量插入笔记
-        List<Note> insertedNotes = noteService.batchCreateNotes(notesToInsert);
-
-        // 更新成功插入的笔记的详细信息
-        int importedCount = 0;
-        int failedCount = 0;
-
-        // 创建一个映射，用于快速查找已插入的笔记
-        Map<String, Note> titleToNoteMap = new HashMap<>();
-        for (Note note : insertedNotes) {
-            titleToNoteMap.put(note.getTitle(), note);
-        }
-
-        // 更新details列表中成功插入的笔记信息
-        for (ImportDetail detail : details) {
-            if ("PENDING".equals(detail.getStatus())) {
-                // 查找对应的已插入笔记
-                Note insertedNote = titleToNoteMap.get(extractTitleFromFileName(detail.getFileName()));
-                if (insertedNote != null) {
-                    detail.setStatus("SUCCESS");
-                    detail.setMessage("导入成功");
-                    importedCount++;
-                } else {
-                    detail.setStatus("FAILED");
-                    detail.setMessage("插入后未找到对应笔记");
-                    failedCount++;
-                }
-            } else if ("SKIPPED".equals(detail.getStatus())) {
-                failedCount++; // 跳过的文件也计入失败计数
-            } else if ("FAILED".equals(detail.getStatus())) {
-                failedCount++;
+                detail.setMessage("读取文件失败: " + exception.getMessage());
+                log.error("批量导入读取文件失败: {}", normalizedPath, exception);
             }
         }
 
-        result.setImportedCount(importedCount);
-        result.setFailedCount(failedCount);
+        if (!notesToInsert.isEmpty()) {
+            noteService.batchCreateNotes(notesToInsert);
+            for (ImportDetail detail : pendingDetails) {
+                detail.setStatus("SUCCESS");
+                detail.setMessage(detail.getMessage().replace("准备导入", "已导入"));
+            }
+        }
+
+        result.setImportedCount((int) details.stream().filter(detail -> "SUCCESS".equals(detail.getStatus())).count());
+        result.setFailedCount((int) details.stream().filter(detail -> "FAILED".equals(detail.getStatus())).count());
         result.setDetails(details);
-
         return result;
     }
 
-    /**
-     * 检查是否为Markdown文件
-     */
+    private Map<String, Long> buildGroupCache(Long knowledgeBaseId) {
+        Map<String, Long> groupCache = new HashMap<>();
+        for (NoteGroup group : noteGroupService.getKnowledgeBaseGroups(knowledgeBaseId)) {
+            groupCache.put(buildGroupKey(group.getParentId(), group.getName()), group.getId());
+        }
+        return groupCache;
+    }
+
+    private Long resolveGroupId(Long knowledgeBaseId,
+                                String filePath,
+                                int strippedRootDepth,
+                                Map<String, Long> groupCache) {
+        List<String> directories = extractDirectorySegments(filePath);
+        if (directories.size() <= strippedRootDepth) {
+            return null;
+        }
+
+        Long parentId = null;
+        for (int index = strippedRootDepth; index < directories.size(); index++) {
+            String groupName = directories.get(index).trim();
+            if (groupName.isEmpty()) {
+                continue;
+            }
+
+            String cacheKey = buildGroupKey(parentId, groupName);
+            Long groupId = groupCache.get(cacheKey);
+            if (groupId == null) {
+                NoteGroup group = noteGroupService.createGroup(NoteGroupDTO.builder()
+                        .name(groupName)
+                        .knowledgeBaseId(knowledgeBaseId)
+                        .parentId(parentId)
+                        .build());
+                groupId = group.getId();
+                groupCache.put(cacheKey, groupId);
+            }
+            parentId = groupId;
+        }
+
+        return parentId;
+    }
+
+    private int determineSharedRootDepth(MultipartFile[] files) {
+        String sharedFirstDirectory = null;
+
+        for (MultipartFile file : files) {
+            String normalizedPath = normalizePath(file.getOriginalFilename());
+            if (!isMarkdownFile(normalizedPath)) {
+                continue;
+            }
+
+            List<String> directories = extractDirectorySegments(normalizedPath);
+            if (directories.isEmpty()) {
+                return 0;
+            }
+
+            String firstDirectory = directories.get(0);
+            if (sharedFirstDirectory == null) {
+                sharedFirstDirectory = firstDirectory;
+                continue;
+            }
+
+            if (!sharedFirstDirectory.equals(firstDirectory)) {
+                return 0;
+            }
+        }
+
+        return sharedFirstDirectory == null ? 0 : 1;
+    }
+
+    private String buildImportTarget(String filePath, int strippedRootDepth) {
+        List<String> directories = extractDirectorySegments(filePath);
+        if (directories.size() <= strippedRootDepth) {
+            return null;
+        }
+        return String.join(" / ", directories.subList(strippedRootDepth, directories.size()));
+    }
+
+    private String buildGroupKey(Long parentId, String groupName) {
+        return (parentId == null ? "root" : parentId) + "::" + groupName;
+    }
+
+    private List<String> extractDirectorySegments(String filePath) {
+        String normalizedPath = normalizePath(filePath);
+        int lastSeparatorIndex = normalizedPath.lastIndexOf('/');
+        if (lastSeparatorIndex < 0) {
+            return new ArrayList<>();
+        }
+
+        String directoryPath = normalizedPath.substring(0, lastSeparatorIndex);
+        if (directoryPath.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> segments = new ArrayList<>();
+        for (String segment : directoryPath.split("/")) {
+            if (!segment.isBlank()) {
+                segments.add(segment);
+            }
+        }
+        return segments;
+    }
+
     private boolean isMarkdownFile(String fileName) {
-        if (fileName == null) return false;
+        if (fileName == null) {
+            return false;
+        }
         String lowerFileName = fileName.toLowerCase();
         return lowerFileName.endsWith(".md") || lowerFileName.endsWith(".markdown");
     }
 
-    /**
-     * 从文件名提取标题
-     */
     private String extractTitleFromFileName(String fileName) {
-        if (fileName == null) return "未命名笔记";
+        if (fileName == null || fileName.isBlank()) {
+            return "未命名文档";
+        }
 
-        // 获取文件名（不包含路径）
         String name = fileName;
         int lastSeparatorIndex = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
         if (lastSeparatorIndex != -1) {
             name = fileName.substring(lastSeparatorIndex + 1);
         }
 
-        // 去掉.md或.markdown后缀
         if (name.toLowerCase().endsWith(".md")) {
             return name.substring(0, name.length() - 3);
-        } else if (name.toLowerCase().endsWith(".markdown")) {
+        }
+        if (name.toLowerCase().endsWith(".markdown")) {
             return name.substring(0, name.length() - 9);
         }
-
         return name;
     }
 
-    /**
-     * 读取文件内容
-     */
+    private String normalizePath(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            return "未命名文件";
+        }
+        return fileName.replace('\\', '/').replaceAll("^/+", "");
+    }
+
     private String readFileContent(MultipartFile file) throws Exception {
         StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 content.append(line).append("\n");

@@ -1,3 +1,24 @@
+﻿:root {
+    --bg: #f5f5f7;
+    --panel: #ffffff;
+    --ink: #1d1d1f;
+    --muted: #6e6e73;
+    --accent: #0a84ff;
+    --accent-strong: #0060df;
+    --button-primary-bg: #0a84ff;
+    --button-primary-hover: #0060df;
+    --button-primary-text: #ffffff;
+    --button-secondary-bg: #8e8e93;
+    --button-secondary-hover: #7a7a80;
+    --button-secondary-text: #ffffff;
+    --button-danger-bg: #ff3b30;
+    --button-danger-hover: #e32b21;
+    --button-danger-text: #ffffff;
+    --line: #e5e5ea;
+    --shadow: 0 16px 30px rgba(0, 0, 0, 0.12);
+    --radius: 18px;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -5,10 +26,10 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    background: #f5f5f7;
     min-height: 100vh;
-    color: #333;
+    color: var(--ink);
 }
 
 .login-container {
@@ -20,122 +41,110 @@ body {
 }
 
 .login-box {
-    background: white;
-    padding: 40px;
-    border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+    background: var(--panel);
+    padding: 32px 34px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     width: 100%;
-    max-width: 400px;
-    animation: fadeInUp 0.6s ease;
+    max-width: 420px;
+    animation: fadeInUp 0.45s ease;
+    border: 1px solid var(--line);
 }
 
 .login-title {
     text-align: center;
-    margin-bottom: 30px;
-    color: #333;
-    font-size: 28px;
+    margin-bottom: 22px;
+    color: var(--ink);
+    font-size: 22px;
     font-weight: 600;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .form-group label {
     display: block;
     margin-bottom: 8px;
-    color: #555;
+    color: var(--muted);
     font-weight: 500;
+    font-size: 13px;
 }
 
 .form-group input {
     width: 100%;
-    padding: 12px 16px;
-    border: 2px solid #e1e1e1;
-    border-radius: 10px;
-    font-size: 16px;
-    transition: border-color 0.3s;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+    background: #fff;
 }
 
 .form-group input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.15);
 }
 
-.login-btn {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.login-btn:hover {
-    transform: translateY(-2px);
-}
-
+.login-btn,
 .register-btn {
     width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    padding: 12px;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
     border: none;
-    border-radius: 10px;
-    font-size: 16px;
+    border-radius: 12px;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: background 0.2s;
 }
 
+.login-btn:hover,
 .register-btn:hover {
-    transform: translateY(-2px);
+    background: var(--button-primary-hover);
 }
 
 .demo-notice {
-    margin-top: 20px;
-    padding: 15px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #666;
+    margin-top: 16px;
+    padding: 12px;
+    background: #f2f2f7;
+    border-radius: 12px;
+    font-size: 12px;
+    color: var(--muted);
     text-align: center;
 }
 
-/* Tab styles */
 .tab-container {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .tabs {
     display: flex;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #e1e1e1;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--line);
 }
 
 .tab-btn {
     flex: 1;
-    padding: 12px;
+    padding: 10px;
     background: none;
     border: none;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
-    color: #666;
+    color: var(--muted);
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
 }
 
 .tab-btn.active {
-    color: #667eea;
-    border-bottom: 3px solid #667eea;
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
 }
 
 .tab-btn:hover:not(.active) {
-    color: #333;
+    color: var(--ink);
 }
 
 .tab-content {
@@ -149,7 +158,7 @@ body {
 @keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(12px);
     }
 
     to {

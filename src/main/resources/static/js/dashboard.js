@@ -471,16 +471,12 @@ function bindEventListeners() {
     });
     
     // 添加聊天页面入口按钮
-    const chatBtn = document.createElement('button');
-    chatBtn.id = 'chatBtn';
-    chatBtn.className = 'chat-btn';
-    chatBtn.innerHTML = '<i class="fas fa-comments"></i> 智能问答';
-    chatBtn.addEventListener('click', () => {
-        window.location.href = 'chat.html';
-    });
-    
-    // 将聊天按钮插入到搜索区域
-    document.querySelector('.search-section').appendChild(chatBtn);
+    const chatBtn = document.getElementById('chatBtn');
+    if (chatBtn) {
+        chatBtn.addEventListener('click', () => {
+            window.location.href = 'chat.html';
+        });
+    }
 }
 
 // 处理批量导入

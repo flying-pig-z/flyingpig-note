@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -17,4 +18,10 @@ public interface NoteMapper extends BaseMapper<Note> {
      */
     @Delete("DELETE FROM note WHERE knowledge_base_id = #{knowledgeBaseId}")
     void deleteByKnowledgeBaseId(@Param("knowledgeBaseId") Long knowledgeBaseId);
+
+    @Update("UPDATE note SET group_id = #{groupId} WHERE group_id = #{oldGroupId}")
+    int updateGroupIdByGroupId(@Param("oldGroupId") Long oldGroupId, @Param("groupId") Long groupId);
+
+    @Update("UPDATE note SET group_id = #{groupId} WHERE id = #{id}")
+    int updateGroupIdById(@Param("id") Long id, @Param("groupId") Long groupId);
 }

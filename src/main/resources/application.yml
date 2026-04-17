@@ -1,5 +1,5 @@
 server:
-  port: 9091
+  port: 9092
 
 spring:
   application:
@@ -7,9 +7,9 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://<your_mysql_host>:3306/note_system?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
-    username: <your_mysql_username>
-    password: <your_mysql_password>
+    url: jdbc:mysql://localhost:3306/note_system?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+    username: root
+    password: '@Aa123456'
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
@@ -46,7 +46,7 @@ mybatis-plus:
 logging:
   level:
     # 将mapper包的日志级别调高到error，避免输出SQL相关信息
-    fun.flyingpig.note.mapper: error
+    fun.flyingpig.note.mapper: debug
     root: info
     # MCP 调试日志
     org.springframework.ai.mcp: debug
@@ -56,20 +56,20 @@ logging:
 
 # JWT配置
 jwt:
-  secret: <mySecretKey123456789012345678901234567890>
+  secret: mySecretKey123456789012345678901234567890
   expiration: 86400000
   header: Authorization
   prefix: Bearer
 
 # 问答AI配置
 chat:
-  api-key: <your_api_key>
+  api-key: ak_1Yg9aI0Vw1bo8O92VO4Or2lf2ql3o
   base-url: https://api.longcat.chat/openai
   model: LongCat-Flash-Chat
 
 # 智谱清言配置
 zhipu:
-  api-key: <your_zhipu_api_key>
+  api-key: aeeac832e6b941059986c241b73748af.8aIB9IPrqvVldtOG
   embedding-model: embedding-3
   embedding-dimensions: 1024
 

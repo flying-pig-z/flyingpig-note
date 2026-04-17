@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import fun.flyingpig.note.dto.NoteDTO;
 import fun.flyingpig.note.entity.Note;
+import fun.flyingpig.note.entity.NoteGroup;
+import fun.flyingpig.note.exception.BusinessException;
 import fun.flyingpig.note.mapper.NoteMapper;
 import fun.flyingpig.note.service.KnowledgeBaseService;
+import fun.flyingpig.note.service.NoteGroupService;
 import fun.flyingpig.note.service.NoteService;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -20,12 +22,15 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
     @Autowired
     private KnowledgeBaseService knowledgeBaseService;
 
+    @Autowired
+    private NoteGroupService noteGroupService;
+
     @Override
     public List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId) {
         LambdaQueryWrapper<Note> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Note::getKnowledgeBaseId, knowledgeBaseId)
-                .select(Note::getId, Note::getTitle) // 内容不传回进一步优化性能，但是需要修改前端
-                .orderByDesc(Note::getUpdateTime);
+                .select(Note::getId, Note::getTitle, Note::getGroupId, Note::getCreateTime, Note::getUpdateTime)
+                .orderByAsc(Note::getCreateTime, Note::getId);
         return this.list(queryWrapper);
     }
 
@@ -36,7 +41,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
                 .and(wrapper -> wrapper.like(Note::getTitle, keyword)
                         .or()
                         .like(Note::getContent, keyword))
-                .select(Note::getId, Note::getTitle) // 内容不传回进一步优化性能，但是需要修改前端
+                .select(Note::getId, Note::getTitle, Note::getGroupId, Note::getCreateTime, Note::getUpdateTime)
                 .orderByDesc(Note::getUpdateTime);
         return this.list(queryWrapper);
     }
@@ -70,9 +75,23 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
     public Note updateNote(Long id, NoteDTO dto) {
         Note note = this.getById(id);
         if (note != null) {
+            validateKnowledgeBaseMatch(note.getKnowledgeBaseId(), dto.getKnowledgeBaseId());
+            validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
             note.setTitle(dto.getTitle());
             note.setContent(dto.getContent());
+            note.setGroupId(dto.getGroupId());
             this.updateById(note);
+        }
+        return note;
+    }
+
+    @Override
+    public Note updateNoteGroup(Long id, Long groupId) {
+        Note note = this.getById(id);
+        if (note != null) {
+            validateGroupBelongsToKnowledgeBase(note.getKnowledgeBaseId(), groupId);
+            this.baseMapper.updateGroupIdById(id, groupId);
+            note.setGroupId(groupId);
         }
         return note;
     }
@@ -93,10 +112,13 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
     
     @Override
     public Note createNoteAndUpdateCount(NoteDTO dto) {
+        validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
+
         Note note = Note.builder()
                 .title(dto.getTitle())
                 .content(dto.getContent())
                 .knowledgeBaseId(dto.getKnowledgeBaseId())
+                .groupId(dto.getGroupId())
                 .build();
         this.save(note);
 
@@ -123,5 +145,22 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
         }
 
         return notes;
+    }
+
+    private void validateKnowledgeBaseMatch(Long expectedKnowledgeBaseId, Long actualKnowledgeBaseId) {
+        if (!expectedKnowledgeBaseId.equals(actualKnowledgeBaseId)) {
+            throw new BusinessException(400, "文档不能切换到其他知识库");
+        }
+    }
+
+    private void validateGroupBelongsToKnowledgeBase(Long knowledgeBaseId, Long groupId) {
+        if (groupId == null) {
+            return;
+        }
+
+        NoteGroup group = noteGroupService.getById(groupId);
+        if (group == null || !knowledgeBaseId.equals(group.getKnowledgeBaseId())) {
+            throw new BusinessException(400, "目标分组不存在或不属于当前知识库");
+        }
     }
 }
