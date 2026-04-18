@@ -4,34 +4,28 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import fun.flyingpig.note.dto.KnowledgeBaseDTO;
 import fun.flyingpig.note.entity.KnowledgeBase;
+import fun.flyingpig.note.exception.BusinessException;
 import fun.flyingpig.note.mapper.KnowledgeBaseMapper;
-import fun.flyingpig.note.mapper.NoteMapper;
 import fun.flyingpig.note.mapper.NoteGroupMapper;
+import fun.flyingpig.note.mapper.NoteMapper;
+import fun.flyingpig.note.qdrant.QdrantClient;
 import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
 import fun.flyingpig.note.service.vectorindex.INoteVectorIndexService;
-import fun.flyingpig.note.qdrant.QdrantClient;
-import org.springframework.beans.BeanUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, KnowledgeBase>
         implements KnowledgeBaseService {
-    
-    @Autowired
-    private NoteMapper noteMapper;
-    
 
-    @Autowired
-    private NoteGroupMapper noteGroupMapper;
-    @Autowired
-    private INoteVectorIndexService noteVectorIndexService;
-
-    @Autowired
-    QdrantClient qdrantClient;
+    private final NoteMapper noteMapper;
+    private final NoteGroupMapper noteGroupMapper;
+    private final INoteVectorIndexService noteVectorIndexService;
+    private final QdrantClient qdrantClient;
 
     @Override
     public List<KnowledgeBase> getUserKnowledgeBases(Long userId) {
@@ -60,7 +54,6 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
                 .userId(userId)
                 .indexUpdateTime(dto.getIndexUpdateTime())
                 .build();
-        // 索引创建时会设置索引更新时间
         this.save(knowledgeBase);
         return knowledgeBase;
     }
@@ -69,16 +62,13 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     public void updateNoteCount(Long kbId, Integer delta) {
         this.baseMapper.updateNoteCount(kbId, delta);
     }
-    
+
     @Override
     @Transactional
     public void deleteKnowledgeBaseCascade(Long kbId) {
-        // 删除该知识库下的所有向量索引
         noteVectorIndexService.deleteByKnowledgeBaseId(kbId);
         qdrantClient.deleteByKnowledgeBaseId(kbId);
-        // 删除该知识库下的所有笔记
         noteMapper.deleteByKnowledgeBaseId(kbId);
-        // 删除知识库本身
         noteGroupMapper.deleteByKnowledgeBaseId(kbId);
         this.removeById(kbId);
     }
@@ -87,10 +77,10 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     public KnowledgeBase updateKnowledgeBase(Long kbId, Long userId, KnowledgeBaseDTO dto) {
         KnowledgeBase knowledgeBase = this.getById(kbId);
         if (knowledgeBase == null) {
-            throw new IllegalArgumentException("知识库不存在");
+            throw new BusinessException(404, "知识库不存在");
         }
         if (!knowledgeBase.getUserId().equals(userId)) {
-            throw new SecurityException("无权限操作");
+            throw new BusinessException(403, "无权操作该知识库");
         }
         knowledgeBase.setTitle(dto.getTitle());
         knowledgeBase.setDescription(dto.getDescription());
@@ -102,10 +92,10 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     public void deleteKnowledgeBaseWithPermissionCheck(Long kbId, Long userId) {
         KnowledgeBase knowledgeBase = this.getById(kbId);
         if (knowledgeBase == null) {
-            throw new IllegalArgumentException("知识库不存在");
+            throw new BusinessException(404, "知识库不存在");
         }
         if (!knowledgeBase.getUserId().equals(userId)) {
-            throw new SecurityException("无权限操作");
+            throw new BusinessException(403, "无权操作该知识库");
         }
         deleteKnowledgeBaseCascade(kbId);
     }

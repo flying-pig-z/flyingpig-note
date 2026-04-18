@@ -8,45 +8,35 @@ import java.util.List;
 
 public interface NoteService extends IService<Note> {
 
-    /**
-     * 获取知识库的笔记列表
-     */
-     List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId);
+    List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId, Long userId);
 
-    /**
-     * 搜索笔记
-     */
+    List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId);
+
+    List<Note> searchNotes(Long knowledgeBaseId, String keyword, Long userId);
+
     List<Note> searchNotes(Long knowledgeBaseId, String keyword);
 
-    /**
-     * 创建笔记
-     */
+    Note getOwnedNoteById(Long id, Long userId);
+
+    Note createNote(Long userId, NoteDTO dto);
+
     Note createNote(NoteDTO dto);
 
-    /**
-     * 批量创建笔记
-     */
     List<Note> batchCreateNotes(List<Note> notes);
 
-    /**
-     * 更新笔记
-     */
+    Note updateNote(Long userId, Long id, NoteDTO dto);
+
     Note updateNote(Long id, NoteDTO dto);
+
+    Note updateNoteGroup(Long userId, Long id, Long groupId);
 
     Note updateNoteGroup(Long id, Long groupId);
 
-    /**
-     * 删除笔记
-     */
+    boolean deleteNoteAndUpdateCount(Long userId, Long id);
+
     boolean deleteNoteAndUpdateCount(Long id);
 
-    /**
-     * 原子性地创建笔记并更新计数
-     */
     Note createNoteAndUpdateCount(NoteDTO dto);
-    
-    /**
-     * 原子性地批量创建笔记并更新计数
-     */
+
     List<Note> batchCreateNotesAndUpdateCount(List<Note> notes);
 }

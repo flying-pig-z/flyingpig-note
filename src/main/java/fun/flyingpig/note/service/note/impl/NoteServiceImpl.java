@@ -10,20 +10,26 @@ import fun.flyingpig.note.mapper.NoteMapper;
 import fun.flyingpig.note.service.knowledgebase.KnowledgeBaseService;
 import fun.flyingpig.note.service.note.NoteService;
 import fun.flyingpig.note.service.notegroup.NoteGroupService;
-import org.springframework.beans.factory.annotation.Autowired;
+import fun.flyingpig.note.service.security.NoteSecurityService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements NoteService {
 
-    @Autowired
-    private KnowledgeBaseService knowledgeBaseService;
+    private final KnowledgeBaseService knowledgeBaseService;
+    private final NoteGroupService noteGroupService;
+    private final NoteSecurityService noteSecurityService;
 
-    @Autowired
-    private NoteGroupService noteGroupService;
+    @Override
+    public List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId, Long userId) {
+        noteSecurityService.requireKnowledgeBaseOwner(knowledgeBaseId, userId);
+        return getKnowledgeBaseNotes(knowledgeBaseId);
+    }
 
     @Override
     public List<Note> getKnowledgeBaseNotes(Long knowledgeBaseId) {
@@ -32,6 +38,12 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
                 .select(Note::getId, Note::getTitle, Note::getGroupId, Note::getCreateTime, Note::getUpdateTime)
                 .orderByAsc(Note::getCreateTime, Note::getId);
         return this.list(queryWrapper);
+    }
+
+    @Override
+    public List<Note> searchNotes(Long knowledgeBaseId, String keyword, Long userId) {
+        noteSecurityService.requireKnowledgeBaseOwner(knowledgeBaseId, userId);
+        return searchNotes(knowledgeBaseId, keyword);
     }
 
     @Override
@@ -47,8 +59,18 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
     }
 
     @Override
+    public Note getOwnedNoteById(Long id, Long userId) {
+        return noteSecurityService.requireNoteOwner(id, userId);
+    }
+
+    @Override
+    public Note createNote(Long userId, NoteDTO dto) {
+        noteSecurityService.requireKnowledgeBaseOwner(dto.getKnowledgeBaseId(), userId);
+        return createNote(dto);
+    }
+
+    @Override
     public Note createNote(NoteDTO dto) {
-        // 调用统一方法以保持一致性
         return createNoteAndUpdateCount(dto);
     }
 
@@ -58,58 +80,83 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
             return new ArrayList<>();
         }
 
-        // 使用MyBatis-Plus的批量保存功能
         this.saveBatch(notes);
-
-        // 批量更新知识库笔记数量（只需要更新一次）
-        if (!notes.isEmpty()) {
-            Long knowledgeBaseId = notes.get(0).getKnowledgeBaseId();
-            long count = notes.size();
-            knowledgeBaseService.updateNoteCount(knowledgeBaseId, (int) count);
-        }
-
+        Long knowledgeBaseId = notes.get(0).getKnowledgeBaseId();
+        knowledgeBaseService.updateNoteCount(knowledgeBaseId, notes.size());
         return notes;
+    }
+
+    @Override
+    public Note updateNote(Long userId, Long id, NoteDTO dto) {
+        Note note = noteSecurityService.requireNoteOwner(id, userId);
+        validateKnowledgeBaseMatch(note.getKnowledgeBaseId(), dto.getKnowledgeBaseId());
+        validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
+        note.setTitle(dto.getTitle());
+        note.setContent(dto.getContent());
+        note.setGroupId(dto.getGroupId());
+        this.updateById(note);
+        return note;
     }
 
     @Override
     public Note updateNote(Long id, NoteDTO dto) {
         Note note = this.getById(id);
-        if (note != null) {
-            validateKnowledgeBaseMatch(note.getKnowledgeBaseId(), dto.getKnowledgeBaseId());
-            validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
-            note.setTitle(dto.getTitle());
-            note.setContent(dto.getContent());
-            note.setGroupId(dto.getGroupId());
-            this.updateById(note);
+        if (note == null) {
+            return null;
         }
+        validateKnowledgeBaseMatch(note.getKnowledgeBaseId(), dto.getKnowledgeBaseId());
+        validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
+        note.setTitle(dto.getTitle());
+        note.setContent(dto.getContent());
+        note.setGroupId(dto.getGroupId());
+        this.updateById(note);
+        return note;
+    }
+
+    @Override
+    public Note updateNoteGroup(Long userId, Long id, Long groupId) {
+        Note note = noteSecurityService.requireNoteOwner(id, userId);
+        validateGroupBelongsToKnowledgeBase(note.getKnowledgeBaseId(), groupId);
+        this.baseMapper.updateGroupIdById(id, groupId);
+        note.setGroupId(groupId);
         return note;
     }
 
     @Override
     public Note updateNoteGroup(Long id, Long groupId) {
         Note note = this.getById(id);
-        if (note != null) {
-            validateGroupBelongsToKnowledgeBase(note.getKnowledgeBaseId(), groupId);
-            this.baseMapper.updateGroupIdById(id, groupId);
-            note.setGroupId(groupId);
+        if (note == null) {
+            return null;
         }
+        validateGroupBelongsToKnowledgeBase(note.getKnowledgeBaseId(), groupId);
+        this.baseMapper.updateGroupIdById(id, groupId);
+        note.setGroupId(groupId);
         return note;
+    }
+
+    @Override
+    public boolean deleteNoteAndUpdateCount(Long userId, Long id) {
+        Note note = noteSecurityService.requireNoteOwner(id, userId);
+        boolean result = this.removeById(id);
+        if (result) {
+            knowledgeBaseService.updateNoteCount(note.getKnowledgeBaseId(), -1);
+        }
+        return result;
     }
 
     @Override
     public boolean deleteNoteAndUpdateCount(Long id) {
         Note note = this.getById(id);
-        if (note != null) {
-            boolean result = this.removeById(id);
-            if (result) {
-                // 更新知识库笔记数量
-                knowledgeBaseService.updateNoteCount(note.getKnowledgeBaseId(), -1);
-            }
-            return result;
+        if (note == null) {
+            return false;
         }
-        return false;
+        boolean result = this.removeById(id);
+        if (result) {
+            knowledgeBaseService.updateNoteCount(note.getKnowledgeBaseId(), -1);
+        }
+        return result;
     }
-    
+
     @Override
     public Note createNoteAndUpdateCount(NoteDTO dto) {
         validateGroupBelongsToKnowledgeBase(dto.getKnowledgeBaseId(), dto.getGroupId());
@@ -121,29 +168,19 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
                 .groupId(dto.getGroupId())
                 .build();
         this.save(note);
-
-        // 原子性地更新知识库笔记数量
         knowledgeBaseService.updateNoteCount(dto.getKnowledgeBaseId(), 1);
-
         return note;
     }
-    
+
     @Override
     public List<Note> batchCreateNotesAndUpdateCount(List<Note> notes) {
         if (notes == null || notes.isEmpty()) {
             return new ArrayList<>();
         }
 
-        // 使用MyBatis-Plus的批量保存功能
         this.saveBatch(notes);
-
-        // 原子性地更新知识库笔记数量（只需要更新一次）
-        if (!notes.isEmpty()) {
-            Long knowledgeBaseId = notes.get(0).getKnowledgeBaseId();
-            long count = notes.size();
-            knowledgeBaseService.updateNoteCount(knowledgeBaseId, (int) count);
-        }
-
+        Long knowledgeBaseId = notes.get(0).getKnowledgeBaseId();
+        knowledgeBaseService.updateNoteCount(knowledgeBaseId, notes.size());
         return notes;
     }
 

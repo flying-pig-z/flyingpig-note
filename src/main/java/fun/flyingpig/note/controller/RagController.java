@@ -8,6 +8,7 @@ import fun.flyingpig.note.dto.UpdateIndexDTO;
 import fun.flyingpig.note.dto.UpdateIndexResultDTO;
 import fun.flyingpig.note.service.rag.RagAnswerService;
 import fun.flyingpig.note.service.rag.RagIndexService;
+import fun.flyingpig.note.service.security.NoteSecurityService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,12 +35,14 @@ public class RagController {
 
     private final RagAnswerService ragAnswerService;
     private final RagIndexService ragIndexService;
+    private final NoteSecurityService noteSecurityService;
 
     @PostMapping("/answer")
     public Result<RagAnswerDTO> answer(@RequestBody @Validated RagQueryDTO queryDTO) {
-        log.info("收到RAG问答请求: {}", queryDTO.getQuestion());
-        RagAnswerDTO answer = ragAnswerService.answer(queryDTO);
-        return Result.success(answer);
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwnership(queryDTO.getKnowledgeBaseIds(), userId);
+        log.info("收到 RAG 问答请求: {}", queryDTO.getQuestion());
+        return Result.success(ragAnswerService.answer(queryDTO));
     }
 
     @PostMapping(value = "/answer/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -47,7 +50,9 @@ public class RagController {
             @RequestBody @Validated RagQueryDTO queryDTO,
             HttpServletResponse response
     ) {
-        log.info("收到RAG流式问答请求: {}", queryDTO.getQuestion());
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwnership(queryDTO.getKnowledgeBaseIds(), userId);
+        log.info("收到 RAG 流式问答请求: {}", queryDTO.getQuestion());
         prepareSseResponse(response);
 
         return outputStream -> {
@@ -62,8 +67,8 @@ public class RagController {
                 donePayload.put("relevantDocuments", answer.getRelevantDocuments());
                 writeSseEvent(writer, "done", donePayload);
             } catch (Exception e) {
-                log.error("RAG流式问答失败", e);
-                writeSseEvent(writer, "error", Map.of("message", "抱歉，流式回答生成失败，请稍后重试。"));
+                log.error("RAG 流式问答失败", e);
+                writeSseEvent(writer, "error", Map.of("message", "流式回答生成失败，请稍后重试"));
             } finally {
                 writer.flush();
             }
@@ -72,9 +77,10 @@ public class RagController {
 
     @PostMapping("/updateIndex")
     public Result<UpdateIndexResultDTO> updateIndex(@RequestBody @Validated UpdateIndexDTO updateIndexDTO) {
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwner(updateIndexDTO.getKnowledgeBaseId(), userId);
         log.info("收到更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
-        UpdateIndexResultDTO result = ragIndexService.updateIndex(updateIndexDTO);
-        return Result.success(result);
+        return Result.success(ragIndexService.updateIndex(updateIndexDTO));
     }
 
     @PostMapping(value = "/updateIndex/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -82,6 +88,8 @@ public class RagController {
             @RequestBody @Validated UpdateIndexDTO updateIndexDTO,
             HttpServletResponse response
     ) {
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwner(updateIndexDTO.getKnowledgeBaseId(), userId);
         log.info("收到流式更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
         prepareSseResponse(response);
         return streamIndexUpdate(
@@ -92,9 +100,10 @@ public class RagController {
 
     @PostMapping("/forceUpdateIndex")
     public Result<UpdateIndexResultDTO> forceUpdateIndex(@RequestBody @Validated UpdateIndexDTO updateIndexDTO) {
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwner(updateIndexDTO.getKnowledgeBaseId(), userId);
         log.info("收到强制更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
-        UpdateIndexResultDTO result = ragIndexService.forceUpdateIndex(updateIndexDTO);
-        return Result.success(result);
+        return Result.success(ragIndexService.forceUpdateIndex(updateIndexDTO));
     }
 
     @PostMapping(value = "/forceUpdateIndex/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -102,6 +111,8 @@ public class RagController {
             @RequestBody @Validated UpdateIndexDTO updateIndexDTO,
             HttpServletResponse response
     ) {
+        Long userId = noteSecurityService.requireCurrentUserId();
+        noteSecurityService.requireKnowledgeBaseOwner(updateIndexDTO.getKnowledgeBaseId(), userId);
         log.info("收到流式强制更新索引请求, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId());
         prepareSseResponse(response);
         return streamIndexUpdate(
@@ -121,7 +132,7 @@ public class RagController {
                 writeSseEvent(writer, "done", result);
             } catch (Exception e) {
                 log.error("索引更新流失败, 知识库ID: {}", updateIndexDTO.getKnowledgeBaseId(), e);
-                writeSseEvent(writer, "error", Map.of("message", "索引更新失败，请稍后重试。"));
+                writeSseEvent(writer, "error", Map.of("message", "索引更新失败，请稍后重试"));
             } finally {
                 writer.flush();
             }
@@ -143,7 +154,7 @@ public class RagController {
             writer.newLine();
             writer.flush();
         } catch (Exception e) {
-            throw new RuntimeException("写入SSE事件失败", e);
+            throw new RuntimeException("写入 SSE 事件失败", e);
         }
     }
 }

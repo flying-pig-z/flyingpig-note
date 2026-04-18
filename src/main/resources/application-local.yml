@@ -22,13 +22,13 @@ spring:
         name: note-rag-server
         version: 1.0.0
         type: SYNC
-        protocol: SSE
+        protocol: STREAMABLE
         # 启用注解扫描
         annotation-scanner:
           enabled: true
         # SSE 端点
-        sse-endpoint: /mcp/sse
-        sse-message-endpoint: /mcp/messages
+        streamable-http:
+          mcp-endpoint: /mcp
         # 服务器能力
         capabilities:
           tool: true

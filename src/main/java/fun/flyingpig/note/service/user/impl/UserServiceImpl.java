@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import fun.flyingpig.note.dto.LoginDTO;
 import fun.flyingpig.note.dto.RegisterDTO;
 import fun.flyingpig.note.entity.User;
+import fun.flyingpig.note.exception.BusinessException;
 import fun.flyingpig.note.mapper.UserMapper;
 import fun.flyingpig.note.service.user.UserService;
 import fun.flyingpig.note.util.BCryptUtil;
@@ -33,19 +34,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public User register(RegisterDTO registerDTO) {
-        // 检查用户名是否已存在
         if (getUserByUsername(registerDTO.getUsername()) != null) {
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException(400, "用户名已存在");
         }
 
-        // 创建新用户
         String hashedPassword = BCryptUtil.hashPassword(registerDTO.getPassword());
         User user = User.builder()
                 .username(registerDTO.getUsername())
                 .password(hashedPassword)
                 .build();
         this.save(user);
-        
         return user;
     }
 }
